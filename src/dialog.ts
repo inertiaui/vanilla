@@ -51,6 +51,20 @@ export function getScrollLockCount(): number {
     return scrollLockCount
 }
 
+/**
+ * Reset scroll lock state. Useful for HMR scenarios where module state
+ * can get out of sync when a modal is open during hot reload.
+ */
+export function resetScrollLockState(): void {
+    if (scrollLockCount > 0) {
+        document.body.style.overflow = originalOverflow
+        document.body.style.paddingRight = originalPaddingRight
+    }
+    scrollLockCount = 0
+    originalOverflow = ''
+    originalPaddingRight = ''
+}
+
 export function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
     if (!container) {
         return []

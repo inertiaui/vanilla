@@ -4,6 +4,7 @@ export {
     lockScroll,
     unlockScroll,
     getScrollLockCount,
+    resetScrollLockState,
     getFocusableElements,
     createFocusTrap,
     focusFirstElement,
