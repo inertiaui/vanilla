@@ -284,6 +284,82 @@ export interface Dialog {
     readonly isActive: boolean
 }
 
+/**
+ * Parses CSS duration values and returns maximum duration in milliseconds.
+ * Handles single values like "0.3s" and multiple values like "0s, 0.3s, 300ms"
+ */
+function parseMaxDuration(durationStr: string): number {
+    const durations = durationStr.split(',').map((d) => d.trim())
+    let maxMs = 0
+
+    for (const duration of durations) {
+        const match = duration.match(/^([\d.]+)(s|ms)$/)
+        if (match) {
+            const value = parseFloat(match[1])
+            const ms = match[2] === 's' ? value * 1000 : value
+            maxMs = Math.max(maxMs, ms)
+        }
+    }
+
+    return maxMs
+}
+
+/**
+ * Waits for a CSS transition to complete on an element, then calls the callback.
+ * Falls back to immediate callback if:
+ * - transition-duration is 0ms
+ * - the element has no computed transition
+ * - the transition doesn't start within a reasonable time
+ */
+export function onTransitionEnd(element: HTMLElement, callback: () => void): CleanupFunction {
+    // Get the computed transition duration
+    const computedStyle = window.getComputedStyle(element)
+    const transitionDuration = computedStyle.transitionDuration || '0s'
+
+    // Parse duration - could be "0s", "0.3s", "300ms", or comma-separated list
+    const durationMs = parseMaxDuration(transitionDuration)
+
+    // If duration is 0 or very small, call immediately
+    if (durationMs < 10) {
+        // Use requestAnimationFrame to ensure any pending state changes are flushed
+        const frameId = requestAnimationFrame(() => callback())
+        return () => cancelAnimationFrame(frameId)
+    }
+
+    let called = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const handler = (event: TransitionEvent) => {
+        if (event.target !== element) return
+        if (called) return
+        called = true
+
+        element.removeEventListener('transitionend', handler)
+        if (timeoutId) {
+            clearTimeout(timeoutId)
+            timeoutId = null
+        }
+        callback()
+    }
+
+    element.addEventListener('transitionend', handler)
+
+    // Safety timeout - if transition doesn't complete within expected duration + buffer
+    timeoutId = setTimeout(() => {
+        if (called) return
+        called = true
+        element.removeEventListener('transitionend', handler)
+        callback()
+    }, durationMs + 100)
+
+    return () => {
+        element.removeEventListener('transitionend', handler)
+        if (timeoutId) {
+            clearTimeout(timeoutId)
+        }
+    }
+}
+
 export function createDialog(dialogElement: HTMLElement, options: DialogOptions = {}): Dialog {
     const {
         appElement = '#app',
