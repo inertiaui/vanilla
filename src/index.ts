@@ -1,4 +1,4 @@
-export { generateId, except, only, rejectNullValues, kebabCase, isStandardDomEvent } from './helpers'
+export { generateId, except, only, rejectNullValues, kebabCase, isStandardDomEvent, sameUrlPath } from './helpers'
 
 export {
     lockScroll,
