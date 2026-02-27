@@ -4,7 +4,7 @@ A lightweight vanilla TypeScript library providing UI utilities for dialogs, ani
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
-- **[Inertia Modal](https://inertiaui.com/inertia-modal)**: Turn any Laravel route into a modal or slideover with a single component. No backend changes needed, with support for nested/stacked modals and inter-modal communication. Works with Vue and React.
+- **[Inertia Modal](https://inertiaui.com/inertia-modal/docs/)**: Turn any Laravel route into a modal or slideover with a single component. No backend changes needed, with support for nested/stacked modals and inter-modal communication. Works with Vue and React.
 - **[Inertia Table](https://inertiaui.com/inertia-table)**: The most complete data table package for Laravel and Inertia.js. Sorting, searching, and filtering across relationships, bulk actions, CSV/Excel/PDF exports, sticky headers, and much more. Works with Vue and React.
 
 [![Inertia UI](https://inertiaui.com/visit-card.jpg)](https://inertiaui.com)
