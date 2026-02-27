@@ -108,10 +108,7 @@ describe('animate', () => {
             const cancelFn1 = vi.fn()
             const cancelFn2 = vi.fn()
 
-            element.getAnimations = vi.fn().mockReturnValue([
-                { cancel: cancelFn1 },
-                { cancel: cancelFn2 },
-            ])
+            element.getAnimations = vi.fn().mockReturnValue([{ cancel: cancelFn1 }, { cancel: cancelFn2 }])
 
             cancelAnimations(element)
 

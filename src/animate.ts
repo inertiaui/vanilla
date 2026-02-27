@@ -35,11 +35,7 @@ const defaultOptions: Required<AnimateOptions> = {
  * @example
  * await animate(element, keyframes.fadeIn, { duration: 200 })
  */
-export function animate(
-    element: HTMLElement,
-    keyframes: Keyframe[],
-    options: AnimateOptions = {},
-): Promise<Animation> {
+export function animate(element: HTMLElement, keyframes: Keyframe[], options: AnimateOptions = {}): Promise<Animation> {
     const { duration, easing, fill } = { ...defaultOptions, ...options }
 
     // Resolve easing name to actual easing function

@@ -164,7 +164,8 @@ interface AriaHiddenStackItem {
 const ariaHiddenStack: AriaHiddenStackItem[] = []
 
 export function markAriaHidden(elementOrSelector: Element | string): CleanupFunction {
-    const element = typeof elementOrSelector === 'string' ? document.querySelector(elementOrSelector) : elementOrSelector
+    const element =
+        typeof elementOrSelector === 'string' ? document.querySelector(elementOrSelector) : elementOrSelector
 
     if (!element) {
         return function noop() {}
