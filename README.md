@@ -82,11 +82,7 @@ Creates a focus trap within a container element.
 ```typescript
 import { createFocusTrap } from '@inertiaui/vanilla'
 
-const cleanup = createFocusTrap(container, {
-    initialFocus: true,
-    initialFocusElement: null,
-    returnFocus: true,
-})
+const cleanup = createFocusTrap(dialogElement)
 
 // Later, remove the focus trap
 cleanup()
@@ -111,13 +107,11 @@ The focus trap:
 - Supports nesting: when multiple traps are active, only the most recently created trap receives focus. Cleaning up the inner trap restores the outer trap.
 
 ```typescript
-const container = document.getElementById('dialog')
+const container = document.getElementById('dialog')!
 const submitButton = document.getElementById('submit')
 
 const cleanup = createFocusTrap(container, {
-    initialFocus: true,
     initialFocusElement: submitButton, // Focus submit button instead of first element
-    returnFocus: true,
 })
 ```
 
@@ -169,18 +163,13 @@ const cleanup = onEscapeKey(handleEscape, {
 The cleanup function pattern integrates well with framework lifecycle hooks:
 
 ```typescript
-// Vue
-onMounted(() => {
-    cleanup = onEscapeKey(close)
-})
-onUnmounted(() => {
-    cleanup()
-})
+// Vue (<script setup>)
+const cleanup = onEscapeKey(closeDialog)
+onUnmounted(() => cleanup())
 
 // React
 useEffect(() => {
-    const cleanup = onEscapeKey(close)
-    return cleanup
+    return onEscapeKey(closeDialog)
 }, [])
 ```
 
@@ -205,11 +194,11 @@ Accepts either an element or a CSS selector:
 
 ```typescript
 // Using selector
-const cleanup = markAriaHidden('#app')
+const cleanup1 = markAriaHidden('#app')
 
 // Using element
-const element = document.getElementById('app')
-const cleanup = markAriaHidden(element)
+const element = document.getElementById('app')!
+const cleanup2 = markAriaHidden(element)
 ```
 
 ### Reference Counting
@@ -236,27 +225,27 @@ cleanup2()
 The original `aria-hidden` value is preserved and restored:
 
 ```typescript
-const element = document.getElementById('sidebar')
+const element = document.getElementById('sidebar')!
 element.setAttribute('aria-hidden', 'false')
 
 const cleanup = markAriaHidden(element)
-console.log(element.getAttribute('aria-hidden')) // 'true'
+element.getAttribute('aria-hidden') // 'true'
 
 cleanup()
-console.log(element.getAttribute('aria-hidden')) // 'false' (restored)
+element.getAttribute('aria-hidden') // 'false' (restored)
 ```
 
 If the element had no `aria-hidden` attribute, the attribute is removed on cleanup:
 
 ```typescript
-const element = document.getElementById('main')
+const element = document.getElementById('main')!
 // No aria-hidden attribute
 
 const cleanup = markAriaHidden(element)
-console.log(element.getAttribute('aria-hidden')) // 'true'
+element.getAttribute('aria-hidden') // 'true'
 
 cleanup()
-console.log(element.getAttribute('aria-hidden')) // null (removed)
+element.getAttribute('aria-hidden') // null (removed)
 ```
 
 ### Use with Dialogs
@@ -267,14 +256,16 @@ When a dialog opens, the main content should be marked as `aria-hidden` to preve
 import { markAriaHidden, lockScroll, createFocusTrap, onEscapeKey } from '@inertiaui/vanilla'
 
 function openDialog(dialogElement: HTMLElement) {
+    const closeDialog = () => cleanups.forEach(fn => fn())
+
     const cleanups = [
         markAriaHidden('#app'),
         lockScroll(),
         createFocusTrap(dialogElement),
-        onEscapeKey(() => closeDialog()),
+        onEscapeKey(closeDialog),
     ]
 
-    return () => cleanups.forEach(cleanup => cleanup())
+    return closeDialog
 }
 ```
 
@@ -388,10 +379,10 @@ const id = generateId()
 #### Custom Prefix
 
 ```typescript
-const id = generateId('modal_')
+generateId('modal_')
 // 'modal_550e8400-e29b-41d4-a716-446655440000'
 
-const id = generateId('dialog-')
+generateId('dialog-')
 // 'dialog-550e8400-e29b-41d4-a716-446655440000'
 ```
 
@@ -577,15 +568,15 @@ isStandardDomEvent('OnClick')  // true
 Useful for distinguishing between standard DOM events and custom events when processing event handlers:
 
 ```typescript
-const props = {
+const props: Record<string, Function> = {
     onClick: handleClick,
     onMouseOver: handleHover,
     onModalReady: handleModalReady,
     onUserUpdated: handleUserUpdated,
 }
 
-const domEvents = {}
-const customEvents = {}
+const domEvents: Record<string, Function> = {}
+const customEvents: Record<string, Function> = {}
 
 for (const [key, value] of Object.entries(props)) {
     if (isStandardDomEvent(key)) {
