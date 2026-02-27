@@ -53,7 +53,7 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
     }
 
     return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)).filter(
-        (el) => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden'),
+        (el) => el.getAttribute('aria-hidden') !== 'true',
     )
 }
 
@@ -63,50 +63,70 @@ export interface FocusTrapOptions {
     returnFocus?: boolean
 }
 
+interface FocusTrapEntry {
+    container: HTMLElement
+}
+
+const focusTrapStack: FocusTrapEntry[] = []
+
+function handleTrapKeyDown(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || focusTrapStack.length === 0) {
+        return
+    }
+
+    const { container } = focusTrapStack[focusTrapStack.length - 1]
+    const focusableElements = getFocusableElements(container)
+    if (focusableElements.length === 0) {
+        return
+    }
+
+    const firstElement = focusableElements[0]
+    const lastElement = focusableElements[focusableElements.length - 1]
+
+    if (event.shiftKey) {
+        if (document.activeElement === firstElement || !container.contains(document.activeElement)) {
+            event.preventDefault()
+            lastElement.focus()
+        }
+    } else {
+        if (document.activeElement === lastElement || !container.contains(document.activeElement)) {
+            event.preventDefault()
+            firstElement.focus()
+        }
+    }
+}
+
+function handleTrapFocusIn(event: FocusEvent) {
+    if (focusTrapStack.length === 0) {
+        return
+    }
+
+    const { container } = focusTrapStack[focusTrapStack.length - 1]
+    if (!container.contains(event.target as Node)) {
+        const focusableElements = getFocusableElements(container)
+        if (focusableElements.length > 0) {
+            focusableElements[0].focus()
+        }
+    }
+}
+
 export function createFocusTrap(container: HTMLElement, options: FocusTrapOptions = {}): CleanupFunction {
     const { initialFocus = true, initialFocusElement = null, returnFocus = true } = options
     const previouslyFocused = document.activeElement as HTMLElement | null
 
-    function handleKeyDown(event: KeyboardEvent) {
-        if (event.key !== 'Tab') {
-            return
-        }
+    const entry: FocusTrapEntry = { container }
 
-        const focusableElements = getFocusableElements(container)
-        if (focusableElements.length === 0) {
-            return
-        }
-
-        const firstElement = focusableElements[0]
-        const lastElement = focusableElements[focusableElements.length - 1]
-
-        if (event.shiftKey) {
-            if (document.activeElement === firstElement || !container.contains(document.activeElement)) {
-                event.preventDefault()
-                lastElement.focus()
-            }
-        } else {
-            if (document.activeElement === lastElement || !container.contains(document.activeElement)) {
-                event.preventDefault()
-                firstElement.focus()
-            }
-        }
+    if (focusTrapStack.length === 0) {
+        document.addEventListener('keydown', handleTrapKeyDown)
+        document.addEventListener('focusin', handleTrapFocusIn)
     }
 
-    function handleFocusIn(event: FocusEvent) {
-        if (!container.contains(event.target as Node)) {
-            const focusableElements = getFocusableElements(container)
-            if (focusableElements.length > 0) {
-                focusableElements[0].focus()
-            }
-        }
-    }
+    focusTrapStack.push(entry)
 
-    document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('focusin', handleFocusIn)
-
+    let rafId: number | undefined
     if (initialFocus) {
-        requestAnimationFrame(() => {
+        rafId = requestAnimationFrame(() => {
+            rafId = undefined
             if (initialFocusElement && container.contains(initialFocusElement)) {
                 initialFocusElement.focus()
             } else {
@@ -118,9 +138,26 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
         })
     }
 
+    let cleaned = false
     return function cleanup() {
-        document.removeEventListener('keydown', handleKeyDown)
-        document.removeEventListener('focusin', handleFocusIn)
+        if (cleaned) {
+            return
+        }
+        cleaned = true
+
+        if (rafId !== undefined) {
+            cancelAnimationFrame(rafId)
+        }
+
+        const index = focusTrapStack.indexOf(entry)
+        if (index >= 0) {
+            focusTrapStack.splice(index, 1)
+        }
+
+        if (focusTrapStack.length === 0) {
+            document.removeEventListener('keydown', handleTrapKeyDown)
+            document.removeEventListener('focusin', handleTrapFocusIn)
+        }
 
         if (returnFocus && previouslyFocused && typeof previouslyFocused.focus === 'function') {
             previouslyFocused.focus()
@@ -164,7 +201,8 @@ interface AriaHiddenStackItem {
 const ariaHiddenStack: AriaHiddenStackItem[] = []
 
 export function markAriaHidden(elementOrSelector: Element | string): CleanupFunction {
-    const element = typeof elementOrSelector === 'string' ? document.querySelector(elementOrSelector) : elementOrSelector
+    const element =
+        typeof elementOrSelector === 'string' ? document.querySelector(elementOrSelector) : elementOrSelector
 
     if (!element) {
         return function noop() {}

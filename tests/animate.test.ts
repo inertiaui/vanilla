@@ -100,6 +100,19 @@ describe('animate', () => {
             const result = animate(element, keyframes)
             await expect(result).resolves.toBeDefined()
         })
+
+        it('should resolve gracefully on cancellation instead of rejecting', async () => {
+            const cancelledAnimation = { cancel: vi.fn() } as unknown as Animation
+            mockAnimation.finished = Promise.reject(new DOMException('The animation was aborted', 'AbortError'))
+
+            element.animate = vi.fn().mockReturnValue(mockAnimation)
+
+            const keyframes = [{ opacity: 0 }, { opacity: 1 }]
+            const result = animate(element, keyframes)
+
+            // Should resolve instead of rejecting
+            await expect(result).resolves.toBeDefined()
+        })
     })
 
     describe('cancelAnimations', () => {
@@ -108,10 +121,7 @@ describe('animate', () => {
             const cancelFn1 = vi.fn()
             const cancelFn2 = vi.fn()
 
-            element.getAnimations = vi.fn().mockReturnValue([
-                { cancel: cancelFn1 },
-                { cancel: cancelFn2 },
-            ])
+            element.getAnimations = vi.fn().mockReturnValue([{ cancel: cancelFn1 }, { cancel: cancelFn2 }])
 
             cancelAnimations(element)
 

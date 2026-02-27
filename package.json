@@ -5,6 +5,7 @@
     "private": false,
     "license": "MIT",
     "type": "module",
+    "sideEffects": false,
     "files": [
         "dist"
     ],
@@ -16,11 +17,28 @@
             "import": "./dist/index.js"
         }
     },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/inertiaui/vanilla"
+    },
+    "keywords": [
+        "dialog",
+        "focus-trap",
+        "scroll-lock",
+        "aria-hidden",
+        "animation",
+        "web-animations-api",
+        "accessibility",
+        "a11y",
+        "vanilla-js",
+        "typescript"
+    ],
     "scripts": {
         "dev": "vite build --watch",
-        "build": "vite build && tsc --emitDeclarationOnly",
+        "build": "vite build",
         "lint": "eslint src/",
         "format": "prettier --write src/ tests/",
+        "format:check": "prettier --check src/ tests/",
         "test": "vitest",
         "prepublishOnly": "npm run build"
     },

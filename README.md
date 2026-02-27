@@ -108,6 +108,7 @@ The focus trap:
 - Catches focus that escapes (e.g., via mouse click outside)
 - Optionally focuses the first focusable element on creation
 - Optionally returns focus to the previously focused element on cleanup
+- Supports nesting: when multiple traps are active, only the most recently created trap receives focus. Cleaning up the inner trap restores the outer trap.
 
 ```typescript
 const container = document.getElementById('dialog')
@@ -130,7 +131,7 @@ The focus trap recognizes these elements as focusable:
 - `select:not([disabled])`
 - `[tabindex]:not([tabindex="-1"])`
 
-Elements with `aria-hidden` or `disabled` attributes are excluded.
+Elements with `aria-hidden="true"` are excluded. (Elements with `disabled` are already filtered by the selectors above.)
 
 ## Keyboard Events
 
@@ -283,7 +284,7 @@ The animation module provides a simple wrapper around the Web Animations API wit
 
 ### animate
 
-Animate an element using the Web Animations API. Returns a promise that resolves when the animation completes.
+Animate an element using the Web Animations API. Returns a promise that resolves when the animation completes. If the animation is cancelled (e.g., by calling `cancelAnimations`), the promise resolves with the `Animation` object instead of rejecting.
 
 ```typescript
 import { animate } from '@inertiaui/vanilla'
@@ -533,7 +534,9 @@ kebabCase('already-kebab')   // 'already-kebab'
 ```typescript
 kebabCase('user123Name')           // 'user123-name'
 kebabCase('multiple__underscores') // 'multiple-underscores'
-kebabCase('UPPERCASE')             // 'u-p-p-e-r-c-a-s-e'
+kebabCase('UPPERCASE')             // 'uppercase'
+kebabCase('XMLDocument')           // 'xml-document'
+kebabCase('hello world')           // 'hello-world'
 ```
 
 #### isStandardDomEvent

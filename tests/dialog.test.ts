@@ -124,6 +124,104 @@ describe('dialog', () => {
             cleanup()
             document.body.removeChild(outside)
         })
+
+        it('should support nested traps where only the topmost is active', () => {
+            const container2 = document.createElement('div')
+            container2.innerHTML = `
+                <button id="inner-first">Inner First</button>
+                <button id="inner-last">Inner Last</button>
+            `
+            document.body.appendChild(container2)
+
+            const cleanup1 = createFocusTrap(container, { initialFocus: false })
+            const cleanup2 = createFocusTrap(container2, { initialFocus: false })
+
+            // Tab in inner container should wrap within inner container
+            const innerLast = container2.querySelector('#inner-last') as HTMLElement
+            innerLast.focus()
+
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+            document.dispatchEvent(event)
+            expect(preventDefaultSpy).toHaveBeenCalled()
+
+            // After cleaning up inner trap, outer trap should be active
+            cleanup2()
+
+            const outerLast = container.querySelector('#last') as HTMLElement
+            outerLast.focus()
+
+            const event2 = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+            const preventDefaultSpy2 = vi.spyOn(event2, 'preventDefault')
+            document.dispatchEvent(event2)
+            expect(preventDefaultSpy2).toHaveBeenCalled()
+
+            cleanup1()
+            document.body.removeChild(container2)
+        })
+
+        it('should focus initialFocusElement when provided', () => {
+            vi.useFakeTimers()
+
+            const middle = container.querySelector('#middle') as HTMLElement
+            const cleanup = createFocusTrap(container, {
+                initialFocus: true,
+                initialFocusElement: middle,
+            })
+
+            vi.runAllTimers()
+            vi.useRealTimers()
+
+            expect(document.activeElement).toBe(middle)
+            cleanup()
+        })
+
+        it('should not return focus when returnFocus is false', () => {
+            const outside = document.createElement('button')
+            document.body.appendChild(outside)
+            outside.focus()
+            expect(document.activeElement).toBe(outside)
+
+            const cleanup = createFocusTrap(container, { initialFocus: false, returnFocus: false })
+
+            const first = container.querySelector('#first') as HTMLElement
+            first.focus()
+
+            cleanup()
+            // Should NOT have returned focus to outside button
+            expect(document.activeElement).not.toBe(outside)
+            document.body.removeChild(outside)
+        })
+
+        it('should handle empty container gracefully', () => {
+            vi.useFakeTimers()
+
+            const emptyContainer = document.createElement('div')
+            document.body.appendChild(emptyContainer)
+
+            const cleanup = createFocusTrap(emptyContainer, { initialFocus: true })
+
+            // Should not throw
+            vi.runAllTimers()
+            vi.useRealTimers()
+
+            cleanup()
+            document.body.removeChild(emptyContainer)
+        })
+
+        it('should cancel rAF on immediate cleanup', () => {
+            const cancelSpy = vi.spyOn(globalThis, 'cancelAnimationFrame')
+            const cleanup = createFocusTrap(container, { initialFocus: true })
+            cleanup()
+            expect(cancelSpy).toHaveBeenCalled()
+            cancelSpy.mockRestore()
+        })
+
+        it('should be idempotent on double cleanup', () => {
+            const cleanup = createFocusTrap(container, { initialFocus: false })
+            cleanup()
+            cleanup() // Should not throw
+        })
     })
 
     describe('onEscapeKey', () => {
@@ -171,6 +269,20 @@ describe('dialog', () => {
             document.dispatchEvent(event)
 
             expect(preventDefaultSpy).toHaveBeenCalled()
+
+            cleanup()
+        })
+
+        it('should support stopPropagation option', () => {
+            const callback = vi.fn()
+            const cleanup = onEscapeKey(callback, { stopPropagation: true })
+
+            const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+            const stopPropagationSpy = vi.spyOn(event, 'stopPropagation')
+            document.dispatchEvent(event)
+
+            expect(stopPropagationSpy).toHaveBeenCalled()
+            expect(callback).toHaveBeenCalled()
 
             cleanup()
         })
@@ -233,6 +345,18 @@ describe('dialog', () => {
             const cleanup = markAriaHidden('#non-existent')
             expect(typeof cleanup).toBe('function')
             cleanup() // Should not throw
+        })
+
+        it('should be idempotent on double cleanup', () => {
+            const cleanup1 = markAriaHidden(element)
+            const cleanup2 = markAriaHidden(element)
+
+            cleanup1()
+            cleanup1() // Double cleanup should be a no-op
+            expect(element.getAttribute('aria-hidden')).toBe('true')
+
+            cleanup2()
+            expect(element.getAttribute('aria-hidden')).toBeNull()
         })
     })
 })

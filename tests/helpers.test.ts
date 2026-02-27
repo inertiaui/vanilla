@@ -134,6 +134,16 @@ describe('helpers', () => {
             const arr = [null, null, null]
             expect(rejectNullValues(arr)).toEqual([])
         })
+
+        it('should preserve undefined values in arrays', () => {
+            const arr = [1, null, undefined, 3]
+            expect(rejectNullValues(arr)).toEqual([1, undefined, 3])
+        })
+
+        it('should preserve undefined values in objects', () => {
+            const obj = { a: 1, b: null, c: undefined, d: 3 }
+            expect(rejectNullValues(obj)).toEqual({ a: 1, c: undefined, d: 3 })
+        })
     })
 
     describe('kebabCase', () => {
@@ -147,13 +157,22 @@ describe('helpers', () => {
             ['FirstName1', 'first-name1'],
 
             // With acronyms
-            ['parseXMLDocument', 'parse-x-m-l-document'],
+            ['parseXMLDocument', 'parse-xml-document'],
+            ['HTMLElement', 'html-element'],
+            ['getHTTPSUrl', 'get-https-url'],
+
+            // Spaces
+            ['hello world', 'hello-world'],
+            ['Hello World', 'hello-world'],
 
             // Mixed cases and special chars
             ['snake_case_value', 'snake-case-value'],
             ['already-kebab-case', 'already-kebab-case'],
-            ['UPPERCASE', 'u-p-p-e-r-c-a-s-e'],
+            ['UPPERCASE', 'uppercase'],
             ['multiple__underscores', 'multiple-underscores'],
+
+            // Empty string
+            ['', ''],
         ])('should convert %s to %s', (input, expected) => {
             expect(kebabCase(input)).toBe(expected)
         })
@@ -224,6 +243,14 @@ describe('helpers', () => {
             expect(sameUrlPath(null, '/users')).toBe(false)
             expect(sameUrlPath('/users', undefined)).toBe(false)
             expect(sameUrlPath(null, null)).toBe(false)
+        })
+
+        it('should return false for cross-origin URLs with same path', () => {
+            expect(sameUrlPath('https://a.com/users', 'https://b.com/users')).toBe(false)
+        })
+
+        it('should return true for same-origin URLs with same path', () => {
+            expect(sameUrlPath('https://a.com/users', 'https://a.com/users?page=2')).toBe(true)
         })
     })
 })

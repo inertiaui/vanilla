@@ -4,11 +4,11 @@ export function generateId(prefix = 'inertiaui_'): string {
     }
 
     // Fallback for environments where crypto.randomUUID is not available
-    return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`
+    return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 11)}`
 }
 
 function strToLowercase(key: string): string {
-    return typeof key === 'string' ? key.toLowerCase() : key
+    return key.toLowerCase()
 }
 
 export function except<T extends Record<string, unknown>>(target: T, keys: string[], ignoreCase?: boolean): Partial<T>
@@ -59,7 +59,7 @@ export function only<T extends Record<string, unknown>>(
     }, {} as Partial<T>)
 }
 
-export function rejectNullValues<T>(target: T[]): NonNullable<T>[]
+export function rejectNullValues<T>(target: T[]): Exclude<T, null>[]
 export function rejectNullValues<T extends Record<string, unknown>>(target: T): Partial<T>
 export function rejectNullValues<T extends Record<string, unknown>>(target: T | T[keyof T][]): Partial<T> | unknown[] {
     if (Array.isArray(target)) {
@@ -77,28 +77,12 @@ export function rejectNullValues<T extends Record<string, unknown>>(target: T | 
 export function kebabCase(string: string): string {
     if (!string) return ''
 
-    // Replace all underscores with hyphens
-    string = string.replace(/_/g, '-')
-
-    // Replace all multiple consecutive hyphens with a single hyphen
-    string = string.replace(/-+/g, '-')
-
-    // Check if string is already all lowercase
-    if (!/[A-Z]/.test(string)) {
-        return string
-    }
-
-    // Remove all spaces and convert to word case
-    string = string
-        .replace(/\s+/g, '')
-        .replace(/_/g, '')
-        .replace(/(?:^|\s|-)+([A-Za-z])/g, (_m, p1: string) => p1.toUpperCase())
-
-    // Add delimiter before uppercase letters
-    string = string.replace(/(.)(?=[A-Z])/g, '$1-')
-
-    // Convert to lowercase
-    return string.toLowerCase()
+    return string
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+        .replace(/([a-z\d])([A-Z])/g, '$1-$2')
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-')
+        .toLowerCase()
 }
 
 export function isStandardDomEvent(eventName: string): boolean {
