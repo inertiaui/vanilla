@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { except, only, rejectNullValues, kebabCase, isStandardDomEvent, generateId } from '../src/helpers'
+import { except, only, rejectNullValues, kebabCase, isStandardDomEvent, generateId, sameUrlPath } from '../src/helpers'
 
 describe('helpers', () => {
     describe('generateId', () => {
@@ -193,6 +193,37 @@ describe('helpers', () => {
         it('should handle transition events', () => {
             expect(isStandardDomEvent('onTransitionEnd')).toBe(true)
             expect(isStandardDomEvent('onTransitionStart')).toBe(true)
+        })
+    })
+
+    describe('sameUrlPath', () => {
+        it('should return true for identical paths', () => {
+            expect(sameUrlPath('/users/1', '/users/1')).toBe(true)
+        })
+
+        it('should ignore query strings', () => {
+            expect(sameUrlPath('/users/1', '/users/1?tab=posts')).toBe(true)
+        })
+
+        it('should ignore hash fragments', () => {
+            expect(sameUrlPath('/users/1', '/users/1#section')).toBe(true)
+        })
+
+        it('should return false for different paths', () => {
+            expect(sameUrlPath('/users/1', '/users/2')).toBe(false)
+            expect(sameUrlPath('/users', '/posts')).toBe(false)
+        })
+
+        it('should accept URL objects', () => {
+            const url1 = new URL('https://example.com/users/1')
+            const url2 = new URL('https://example.com/users/1?page=2')
+            expect(sameUrlPath(url1, url2)).toBe(true)
+        })
+
+        it('should return false for null or undefined', () => {
+            expect(sameUrlPath(null, '/users')).toBe(false)
+            expect(sameUrlPath('/users', undefined)).toBe(false)
+            expect(sameUrlPath(null, null)).toBe(false)
         })
     })
 })

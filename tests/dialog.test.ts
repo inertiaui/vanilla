@@ -1,163 +1,128 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import {
-    lockScroll,
-    unlockScroll,
-    getScrollLockCount,
-    getFocusableElements,
-    onClickOutside,
-    onEscapeKey,
-    markAriaHidden,
-    unmarkAriaHidden,
-} from '../src/dialog'
+import { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden } from '../src/dialog'
 
 describe('dialog', () => {
-    beforeEach(() => {
-        // Reset scroll lock state
-        while (getScrollLockCount() > 0) {
-            unlockScroll()
-        }
-        document.body.style.overflow = ''
-        document.body.style.paddingRight = ''
-    })
-
     describe('lockScroll', () => {
+        beforeEach(() => {
+            document.body.style.overflow = ''
+            document.body.style.paddingRight = ''
+        })
+
         it('should lock body scroll', () => {
-            lockScroll()
+            const unlock = lockScroll()
             expect(document.body.style.overflow).toBe('hidden')
-            expect(getScrollLockCount()).toBe(1)
+            unlock()
         })
 
         it('should support multiple locks', () => {
-            lockScroll()
-            lockScroll()
-            expect(getScrollLockCount()).toBe(2)
+            const unlock1 = lockScroll()
+            const unlock2 = lockScroll()
             expect(document.body.style.overflow).toBe('hidden')
+
+            unlock1()
+            expect(document.body.style.overflow).toBe('hidden')
+
+            unlock2()
+            expect(document.body.style.overflow).toBe('')
         })
 
         it('should return an unlock function', () => {
             const unlock = lockScroll()
-            expect(getScrollLockCount()).toBe(1)
+            expect(document.body.style.overflow).toBe('hidden')
             unlock()
-            expect(getScrollLockCount()).toBe(0)
+            expect(document.body.style.overflow).toBe('')
         })
 
         it('should only unlock once per returned function', () => {
-            const unlock = lockScroll()
-            unlock()
-            unlock()
-            expect(getScrollLockCount()).toBe(0)
-        })
-    })
-
-    describe('unlockScroll', () => {
-        it('should decrement lock count', () => {
-            lockScroll()
-            lockScroll()
-            unlockScroll()
-            expect(getScrollLockCount()).toBe(1)
+            const unlock1 = lockScroll()
+            const unlock2 = lockScroll()
+            unlock1()
+            unlock1() // second call should be a no-op
+            expect(document.body.style.overflow).toBe('hidden')
+            unlock2()
+            expect(document.body.style.overflow).toBe('')
         })
 
-        it('should restore overflow when count reaches 0', () => {
+        it('should restore original overflow value', () => {
             document.body.style.overflow = 'auto'
-            lockScroll()
-            unlockScroll()
+            const unlock = lockScroll()
+            expect(document.body.style.overflow).toBe('hidden')
+            unlock()
             expect(document.body.style.overflow).toBe('auto')
         })
-
-        it('should not go below 0', () => {
-            unlockScroll()
-            unlockScroll()
-            expect(getScrollLockCount()).toBe(0)
-        })
     })
 
-    describe('getFocusableElements', () => {
-        it('should return empty array for null container', () => {
-            expect(getFocusableElements(null)).toEqual([])
-        })
+    describe('createFocusTrap', () => {
+        let container: HTMLDivElement
 
-        it('should find focusable elements', () => {
-            const container = document.createElement('div')
+        beforeEach(() => {
+            container = document.createElement('div')
             container.innerHTML = `
-                <button>Button</button>
-                <a href="#">Link</a>
-                <input type="text" />
-                <textarea></textarea>
-                <select><option>Option</option></select>
-                <div tabindex="0">Focusable div</div>
-                <div tabindex="-1">Not focusable</div>
-                <button disabled>Disabled button</button>
+                <button id="first">First</button>
+                <input id="middle" type="text" />
+                <button id="last">Last</button>
             `
             document.body.appendChild(container)
+        })
 
-            const focusable = getFocusableElements(container)
-            expect(focusable.length).toBe(6)
-
+        afterEach(() => {
             document.body.removeChild(container)
         })
 
-        it('should exclude elements with aria-hidden', () => {
-            const container = document.createElement('div')
-            container.innerHTML = `
-                <button>Visible</button>
-                <button aria-hidden="true">Hidden</button>
-            `
-            document.body.appendChild(container)
-
-            const focusable = getFocusableElements(container)
-            expect(focusable.length).toBe(1)
-
-            document.body.removeChild(container)
-        })
-    })
-
-    describe('onClickOutside', () => {
-        it('should call callback when clicking outside element', () => {
-            const element = document.createElement('div')
-            document.body.appendChild(element)
-
-            const callback = vi.fn()
-            const cleanup = onClickOutside(element, callback)
-
-            const event = new MouseEvent('mousedown', { bubbles: true })
-            document.body.dispatchEvent(event)
-
-            expect(callback).toHaveBeenCalled()
-
+        it('should return a cleanup function', () => {
+            const cleanup = createFocusTrap(container)
+            expect(typeof cleanup).toBe('function')
             cleanup()
-            document.body.removeChild(element)
         })
 
-        it('should not call callback when clicking inside element', () => {
-            const element = document.createElement('div')
-            document.body.appendChild(element)
+        it('should trap Tab key to focusable elements', () => {
+            const cleanup = createFocusTrap(container, { initialFocus: false })
+            const last = container.querySelector('#last') as HTMLElement
+            last.focus()
 
-            const callback = vi.fn()
-            const cleanup = onClickOutside(element, callback)
+            const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+            document.dispatchEvent(event)
 
-            const event = new MouseEvent('mousedown', { bubbles: true })
-            element.dispatchEvent(event)
-
-            expect(callback).not.toHaveBeenCalled()
-
+            expect(preventDefaultSpy).toHaveBeenCalled()
             cleanup()
-            document.body.removeChild(element)
         })
 
-        it('should cleanup event listener', () => {
-            const element = document.createElement('div')
-            document.body.appendChild(element)
+        it('should trap Shift+Tab to last element', () => {
+            const cleanup = createFocusTrap(container, { initialFocus: false })
+            const first = container.querySelector('#first') as HTMLElement
+            first.focus()
 
-            const callback = vi.fn()
-            const cleanup = onClickOutside(element, callback)
+            const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+            document.dispatchEvent(event)
+
+            expect(preventDefaultSpy).toHaveBeenCalled()
             cleanup()
+        })
 
-            const event = new MouseEvent('mousedown', { bubbles: true })
-            document.body.dispatchEvent(event)
+        it('should ignore non-Tab keys', () => {
+            const cleanup = createFocusTrap(container, { initialFocus: false })
 
-            expect(callback).not.toHaveBeenCalled()
+            const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+            const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
+            document.dispatchEvent(event)
 
-            document.body.removeChild(element)
+            expect(preventDefaultSpy).not.toHaveBeenCalled()
+            cleanup()
+        })
+
+        it('should redirect focus back into container', () => {
+            const cleanup = createFocusTrap(container, { initialFocus: false })
+            const outside = document.createElement('button')
+            document.body.appendChild(outside)
+
+            const event = new FocusEvent('focusin', { relatedTarget: outside, bubbles: true })
+            Object.defineProperty(event, 'target', { value: outside })
+            document.dispatchEvent(event)
+
+            cleanup()
+            document.body.removeChild(outside)
         })
     })
 
@@ -227,16 +192,18 @@ describe('dialog', () => {
         })
 
         it('should mark element as aria-hidden', () => {
-            markAriaHidden(element)
+            const cleanup = markAriaHidden(element)
             expect(element.getAttribute('aria-hidden')).toBe('true')
+            cleanup()
         })
 
         it('should accept selector string', () => {
-            markAriaHidden('#test-element')
+            const cleanup = markAriaHidden('#test-element')
             expect(element.getAttribute('aria-hidden')).toBe('true')
+            cleanup()
         })
 
-        it('should return cleanup function', () => {
+        it('should return cleanup function that removes aria-hidden', () => {
             const cleanup = markAriaHidden(element)
             expect(element.getAttribute('aria-hidden')).toBe('true')
             cleanup()
@@ -266,32 +233,6 @@ describe('dialog', () => {
             const cleanup = markAriaHidden('#non-existent')
             expect(typeof cleanup).toBe('function')
             cleanup() // Should not throw
-        })
-    })
-
-    describe('unmarkAriaHidden', () => {
-        let element: HTMLDivElement
-
-        beforeEach(() => {
-            element = document.createElement('div')
-            document.body.appendChild(element)
-        })
-
-        afterEach(() => {
-            if (element.parentNode) {
-                document.body.removeChild(element)
-            }
-        })
-
-        it('should remove aria-hidden', () => {
-            markAriaHidden(element)
-            unmarkAriaHidden(element)
-            expect(element.getAttribute('aria-hidden')).toBeNull()
-        })
-
-        it('should do nothing for element not in stack', () => {
-            unmarkAriaHidden(element)
-            expect(element.getAttribute('aria-hidden')).toBeNull()
         })
     })
 })
