@@ -2,6 +2,13 @@
 
 A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
+This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
+
+- **[Inertia Modal](https://inertiaui.com/inertia-modal)**: Turn any Laravel route into a modal or slideover with a single component. No backend changes needed, with support for nested/stacked modals and inter-modal communication. Works with Vue and React.
+- **[Inertia Table](https://inertiaui.com/inertia-table)**: The most complete data table package for Laravel and Inertia.js. Sorting, searching, and filtering across relationships, bulk actions, CSV/Excel/PDF exports, sticky headers, and much more. Works with Vue and React.
+
+[![Inertia UI](https://inertiaui.com/visit-card.jpg)](https://inertiaui.com)
+
 ## Installation
 
 ```bash
@@ -16,10 +23,10 @@ npm install @inertiaui/vanilla
 - [Accessibility](#accessibility)
 - [Animation](#animation)
 - [Helpers](#helpers)
-    - [generateId](#generateid)
-    - [Object Filtering](#object-filtering)
-    - [String Utilities](#string-utilities)
-    - [URL Utilities](#url-utilities)
+  - [generateId](#generateid)
+  - [Object Filtering](#object-filtering)
+  - [String Utilities](#string-utilities)
+  - [URL Utilities](#url-utilities)
 
 ## Scroll Locking
 
@@ -37,6 +44,7 @@ unlock()
 ```
 
 The function:
+
 - Sets `document.body.style.overflow` to `'hidden'`
 - Adds padding to compensate for scrollbar width (prevents layout shift)
 - Returns a cleanup function that can only unlock once
@@ -99,6 +107,7 @@ cleanup()
 #### Behavior
 
 The focus trap:
+
 - Listens for Tab key and wraps focus at container boundaries
 - Prevents focus from leaving the container via Tab or Shift+Tab
 - Catches focus that escapes (e.g., via mouse click outside)
@@ -118,6 +127,7 @@ const cleanup = createFocusTrap(container, {
 #### Focusable Elements
 
 The focus trap recognizes these elements as focusable:
+
 - `a[href]`
 - `button:not([disabled])`
 - `textarea:not([disabled])`
@@ -399,6 +409,7 @@ In environments where `crypto.randomUUID()` is not available, the function falls
 #### Use Cases
 
 Useful for generating unique IDs for:
+
 - Dialog instances
 - Form elements requiring unique IDs
 - Accessibility attributes (`aria-labelledby`, `aria-describedby`)
