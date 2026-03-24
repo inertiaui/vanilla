@@ -4,3 +4,11 @@ export type { EasingName, AnimateOptions } from './animate'
 
 export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden } from './dialog'
 export type { CleanupFunction, FocusTrapOptions, EscapeKeyOptions } from './dialog'
+
+export { onClickOutside } from './clickOutside'
+
+export { createMenuNavigation } from './menu'
+export type { MenuNavigationOptions } from './menu'
+
+export { supportsAnchorPositioning, computePosition, autoUpdate } from './position'
+export type { Placement, PositionOptions, PositionResult } from './position'
