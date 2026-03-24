@@ -81,7 +81,7 @@ test.describe('kebabCase', () => {
     })
 
     test('handles empty string', async ({ page }) => {
-        await expect(page.locator('#kebab-empty')).toHaveText('')
+        await expect(page.locator('#kebab-empty')).toHaveText('(empty)')
     })
 
     test('converts snake_case', async ({ page }) => {

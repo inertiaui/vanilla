@@ -4,48 +4,86 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helpers</title>
+    <link rel="stylesheet" href="shared.css" />
 </head>
 <body>
+    <a href="/" class="back">All demos</a>
     <h1>Helpers</h1>
+    <p class="page-desc">Pure utility functions. Results are computed on page load.</p>
 
-    <!-- generateId -->
-    <span id="generateId-result1"></span>
-    <span id="generateId-result2"></span>
-    <span id="generateId-custom"></span>
+    <section>
+        <h2>generateId</h2>
+        <table class="results-table">
+            <tr><th>Call</th><th>Result</th></tr>
+            <tr><td><code>generateId()</code></td><td id="generateId-result1"></td></tr>
+            <tr><td><code>generateId()</code> (second)</td><td id="generateId-result2"></td></tr>
+            <tr><td><code>generateId('test_')</code></td><td id="generateId-custom"></td></tr>
+        </table>
+    </section>
 
-    <!-- except -->
-    <span id="except-obj"></span>
-    <span id="except-arr"></span>
-    <span id="except-case"></span>
+    <section>
+        <h2>except</h2>
+        <table class="results-table">
+            <tr><th>Call</th><th>Result</th></tr>
+            <tr><td><code>except({a:1,b:2,c:3}, ['b'])</code></td><td id="except-obj"></td></tr>
+            <tr><td><code>except(['a','b','c'], ['b'])</code></td><td id="except-arr"></td></tr>
+            <tr><td><code>except({Name:1,AGE:2,city:3}, ['name','age'], true)</code></td><td id="except-case"></td></tr>
+        </table>
+    </section>
 
-    <!-- only -->
-    <span id="only-obj"></span>
-    <span id="only-arr"></span>
-    <span id="only-case"></span>
+    <section>
+        <h2>only</h2>
+        <table class="results-table">
+            <tr><th>Call</th><th>Result</th></tr>
+            <tr><td><code>only({a:1,b:2,c:3}, ['a','c'])</code></td><td id="only-obj"></td></tr>
+            <tr><td><code>only(['a','b','c','d'], ['b','d'])</code></td><td id="only-arr"></td></tr>
+            <tr><td><code>only({Name:1,AGE:2,city:3}, ['name','city'], true)</code></td><td id="only-case"></td></tr>
+        </table>
+    </section>
 
-    <!-- rejectNullValues -->
-    <span id="reject-obj"></span>
-    <span id="reject-arr"></span>
-    <span id="reject-undefined"></span>
+    <section>
+        <h2>rejectNullValues</h2>
+        <table class="results-table">
+            <tr><th>Call</th><th>Result</th></tr>
+            <tr><td><code>rejectNullValues({a:1,b:null,c:3})</code></td><td id="reject-obj"></td></tr>
+            <tr><td><code>rejectNullValues([1,null,3,null,5])</code></td><td id="reject-arr"></td></tr>
+            <tr><td><code>rejectNullValues({a:1,b:null,c:undefined,d:3})</code></td><td id="reject-undefined"></td></tr>
+        </table>
+    </section>
 
-    <!-- kebabCase -->
-    <span id="kebab-camel"></span>
-    <span id="kebab-pascal"></span>
-    <span id="kebab-acronym"></span>
-    <span id="kebab-spaces"></span>
-    <span id="kebab-empty"></span>
-    <span id="kebab-snake"></span>
+    <section>
+        <h2>kebabCase</h2>
+        <table class="results-table">
+            <tr><th>Input</th><th>Result</th></tr>
+            <tr><td><code>'camelCase'</code></td><td id="kebab-camel"></td></tr>
+            <tr><td><code>'PascalCase'</code></td><td id="kebab-pascal"></td></tr>
+            <tr><td><code>'HTMLElement'</code></td><td id="kebab-acronym"></td></tr>
+            <tr><td><code>'hello world'</code></td><td id="kebab-spaces"></td></tr>
+            <tr><td><code>'snake_case'</code></td><td id="kebab-snake"></td></tr>
+            <tr><td><code>''</code> (empty)</td><td id="kebab-empty">(empty)</td></tr>
+        </table>
+    </section>
 
-    <!-- isStandardDomEvent -->
-    <span id="isEvent-click"></span>
-    <span id="isEvent-custom"></span>
-    <span id="isEvent-case"></span>
+    <section>
+        <h2>isStandardDomEvent</h2>
+        <table class="results-table">
+            <tr><th>Input</th><th>Result</th></tr>
+            <tr><td><code>'onClick'</code></td><td id="isEvent-click"></td></tr>
+            <tr><td><code>'onCustomEvent'</code></td><td id="isEvent-custom"></td></tr>
+            <tr><td><code>'ONCLICK'</code></td><td id="isEvent-case"></td></tr>
+        </table>
+    </section>
 
-    <!-- sameUrlPath -->
-    <span id="sameUrl-same"></span>
-    <span id="sameUrl-query"></span>
-    <span id="sameUrl-diff"></span>
-    <span id="sameUrl-null"></span>
+    <section>
+        <h2>sameUrlPath</h2>
+        <table class="results-table">
+            <tr><th>Call</th><th>Result</th></tr>
+            <tr><td><code>sameUrlPath('/users/1', '/users/1')</code></td><td id="sameUrl-same"></td></tr>
+            <tr><td><code>sameUrlPath('/users/1', '/users/1?tab=posts')</code></td><td id="sameUrl-query"></td></tr>
+            <tr><td><code>sameUrlPath('/users/1', '/users/2')</code></td><td id="sameUrl-diff"></td></tr>
+            <tr><td><code>sameUrlPath(null, '/users')</code></td><td id="sameUrl-null"></td></tr>
+        </table>
+    </section>
 
     <script type="module">
         import {
@@ -55,40 +93,33 @@
 
         const set = (id, value) => document.getElementById(id).textContent = typeof value === 'string' ? value : JSON.stringify(value)
 
-        // generateId
         set('generateId-result1', generateId())
         set('generateId-result2', generateId())
         set('generateId-custom', generateId('test_'))
 
-        // except
         set('except-obj', except({ a: 1, b: 2, c: 3 }, ['b']))
         set('except-arr', except(['a', 'b', 'c'], ['b']))
         set('except-case', except({ Name: 1, AGE: 2, city: 3 }, ['name', 'age'], true))
 
-        // only
         set('only-obj', only({ a: 1, b: 2, c: 3 }, ['a', 'c']))
         set('only-arr', only(['a', 'b', 'c', 'd'], ['b', 'd']))
         set('only-case', only({ Name: 1, AGE: 2, city: 3 }, ['name', 'city'], true))
 
-        // rejectNullValues
         set('reject-obj', rejectNullValues({ a: 1, b: null, c: 3 }))
         set('reject-arr', rejectNullValues([1, null, 3, null, 5]))
         set('reject-undefined', rejectNullValues({ a: 1, b: null, c: undefined, d: 3 }))
 
-        // kebabCase
         set('kebab-camel', kebabCase('camelCase'))
         set('kebab-pascal', kebabCase('PascalCase'))
         set('kebab-acronym', kebabCase('HTMLElement'))
         set('kebab-spaces', kebabCase('hello world'))
-        set('kebab-empty', kebabCase(''))
+        set('kebab-empty', kebabCase('') || '(empty)')
         set('kebab-snake', kebabCase('snake_case'))
 
-        // isStandardDomEvent
         set('isEvent-click', String(isStandardDomEvent('onClick')))
         set('isEvent-custom', String(isStandardDomEvent('onCustomEvent')))
         set('isEvent-case', String(isStandardDomEvent('ONCLICK')))
 
-        // sameUrlPath
         set('sameUrl-same', String(sameUrlPath('/users/1', '/users/1')))
         set('sameUrl-query', String(sameUrlPath('/users/1', '/users/1?tab=posts')))
         set('sameUrl-diff', String(sameUrlPath('/users/1', '/users/2')))

@@ -4,62 +4,84 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Menu</title>
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; }
-        .hidden { display: none; }
-        .menu { border: 1px solid #ccc; padding: 0.5rem; margin: 0.5rem 0; }
-        .menu button, .menu div { display: block; width: 100%; text-align: left; padding: 0.5rem; border: none; background: none; cursor: pointer; }
-        .menu button:focus, .menu div:focus { background: #e0e7ff; outline: 2px solid #4f46e5; }
-    </style>
+    <link rel="stylesheet" href="shared.css" />
 </head>
 <body>
-    <h1>Menu</h1>
+    <a href="/" class="back">All demos</a>
+    <h1>Menu Navigation</h1>
+    <p class="page-desc">Keyboard-driven menu with roving tabindex, type-ahead search, and WAI-ARIA compliance. Open a menu, then use arrow keys, Home/End, Enter/Space, or type a character.</p>
 
-    <button id="open-vertical-btn">Open Vertical</button>
-    <button id="open-horizontal-btn">Open Horizontal</button>
-    <button id="open-noloop-btn">Open No-Loop</button>
-    <button id="open-no-typeahead-btn">Open No Type-Ahead</button>
-    <button id="open-custom-btn">Open Custom Selector</button>
-    <button id="close-btn">Close All</button>
+    <section>
+        <h2>Vertical menu (default)</h2>
+        <p class="hint">Arrow Up/Down to navigate. Cherry is <code>disabled</code>, Date is <code>aria-disabled</code>: both are skipped. Type a letter to jump to a matching item.</p>
+        <div class="btn-row">
+            <button id="open-vertical-btn">Open</button>
+            <button id="close-btn">Close all</button>
+        </div>
+        <div id="menu-vertical" class="panel menu-container hidden" role="menu">
+            <button id="v-item-0" role="menuitem" data-action="apple">Apple</button>
+            <button id="v-item-1" role="menuitem" data-action="banana">Banana</button>
+            <button id="v-item-2" role="menuitem" data-action="cherry" disabled>Cherry (disabled)</button>
+            <button id="v-item-3" role="menuitem" data-action="date" aria-disabled="true">Date (aria-disabled)</button>
+            <button id="v-item-4" role="menuitem" data-action="elderberry">Elderberry</button>
+        </div>
+    </section>
 
-    <!-- Vertical menu with disabled items -->
-    <div id="menu-vertical" class="menu hidden" role="menu">
-        <button id="v-item-0" role="menuitem" data-action="apple">Apple</button>
-        <button id="v-item-1" role="menuitem" data-action="banana">Banana</button>
-        <button id="v-item-2" role="menuitem" data-action="cherry" disabled>Cherry</button>
-        <button id="v-item-3" role="menuitem" data-action="date" aria-disabled="true">Date</button>
-        <button id="v-item-4" role="menuitem" data-action="elderberry">Elderberry</button>
+    <section>
+        <h2>Horizontal menu</h2>
+        <p class="hint">Arrow Left/Right to navigate instead of Up/Down.</p>
+        <div class="btn-row">
+            <button id="open-horizontal-btn">Open</button>
+        </div>
+        <div id="menu-horizontal" class="panel menu-container hidden" role="menu" style="display:none; flex-direction:row; gap:0.25rem;">
+            <button id="h-item-0" role="menuitem">Left</button>
+            <button id="h-item-1" role="menuitem">Center</button>
+            <button id="h-item-2" role="menuitem">Right</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>No-loop menu</h2>
+        <p class="hint">Navigation clamps at the first and last item instead of wrapping around.</p>
+        <div class="btn-row">
+            <button id="open-noloop-btn">Open</button>
+        </div>
+        <div id="menu-noloop" class="panel menu-container hidden" role="menu">
+            <button id="nl-item-0" role="menuitem">First</button>
+            <button id="nl-item-1" role="menuitem">Second</button>
+            <button id="nl-item-2" role="menuitem">Third</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Type-ahead disabled</h2>
+        <p class="hint">Typing characters has no effect.</p>
+        <div class="btn-row">
+            <button id="open-no-typeahead-btn">Open</button>
+        </div>
+        <div id="menu-no-typeahead" class="panel menu-container hidden" role="menu">
+            <button id="nt-item-0" role="menuitem">Alpha</button>
+            <button id="nt-item-1" role="menuitem">Beta</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Custom selector</h2>
+        <p class="hint">Uses <code>.nav-item</code> divs instead of <code>[role="menuitem"]</code> buttons.</p>
+        <div class="btn-row">
+            <button id="open-custom-btn">Open</button>
+        </div>
+        <div id="menu-custom" class="panel menu-container hidden">
+            <div id="c-item-0" class="nav-item" tabindex="-1">Nav One</div>
+            <div id="c-item-1" class="nav-item" tabindex="-1">Nav Two</div>
+            <div id="c-item-2" class="nav-item" tabindex="-1">Nav Three</div>
+        </div>
+    </section>
+
+    <div class="status-row" style="position:sticky; bottom:1rem; background:white; padding:0.5rem; border:1px solid #e2e8f0; border-radius:0.5rem;">
+        <span class="status"><span class="label">Activated:</span> <span class="value" id="activate-log">-</span></span>
+        <span class="status"><span class="label">Focused:</span> <span class="value" id="active-element">-</span></span>
     </div>
-
-    <!-- Horizontal menu -->
-    <div id="menu-horizontal" class="menu hidden" role="menu">
-        <button id="h-item-0" role="menuitem">Left</button>
-        <button id="h-item-1" role="menuitem">Center</button>
-        <button id="h-item-2" role="menuitem">Right</button>
-    </div>
-
-    <!-- No-loop menu -->
-    <div id="menu-noloop" class="menu hidden" role="menu">
-        <button id="nl-item-0" role="menuitem">First</button>
-        <button id="nl-item-1" role="menuitem">Second</button>
-        <button id="nl-item-2" role="menuitem">Third</button>
-    </div>
-
-    <!-- No type-ahead menu -->
-    <div id="menu-no-typeahead" class="menu hidden" role="menu">
-        <button id="nt-item-0" role="menuitem">Alpha</button>
-        <button id="nt-item-1" role="menuitem">Beta</button>
-    </div>
-
-    <!-- Custom selector menu -->
-    <div id="menu-custom" class="menu hidden">
-        <div id="c-item-0" class="nav-item" tabindex="-1">Nav One</div>
-        <div id="c-item-1" class="nav-item" tabindex="-1">Nav Two</div>
-        <div id="c-item-2" class="nav-item" tabindex="-1">Nav Three</div>
-    </div>
-
-    <p>Activated: <span id="activate-log"></span></p>
-    <p>Active: <span id="active-element"></span></p>
 
     <script type="module">
         import { createMenuNavigation } from '../../src/index.ts'
@@ -75,20 +97,27 @@
         function closeAll() {
             cleanup?.()
             cleanup = null
-            document.querySelectorAll('.menu').forEach(m => m.classList.add('hidden'))
+            document.querySelectorAll('.menu-container').forEach(m => {
+                m.classList.add('hidden')
+                m.style.display = 'none'
+            })
+        }
+
+        function showMenu(el, displayStyle = 'block') {
+            closeAll()
+            el.classList.remove('hidden')
+            el.style.display = displayStyle
         }
 
         document.getElementById('open-vertical-btn').addEventListener('click', () => {
-            closeAll()
-            document.getElementById('menu-vertical').classList.remove('hidden')
+            showMenu(document.getElementById('menu-vertical'))
             cleanup = createMenuNavigation(document.getElementById('menu-vertical'), {
                 onActivate: (item) => { activateLog.textContent = item.dataset.action || item.textContent }
             })
         })
 
         document.getElementById('open-horizontal-btn').addEventListener('click', () => {
-            closeAll()
-            document.getElementById('menu-horizontal').classList.remove('hidden')
+            showMenu(document.getElementById('menu-horizontal'), 'flex')
             cleanup = createMenuNavigation(document.getElementById('menu-horizontal'), {
                 orientation: 'horizontal',
                 onActivate: (item) => { activateLog.textContent = item.textContent }
@@ -96,8 +125,7 @@
         })
 
         document.getElementById('open-noloop-btn').addEventListener('click', () => {
-            closeAll()
-            document.getElementById('menu-noloop').classList.remove('hidden')
+            showMenu(document.getElementById('menu-noloop'))
             cleanup = createMenuNavigation(document.getElementById('menu-noloop'), {
                 loop: false,
                 onActivate: (item) => { activateLog.textContent = item.textContent }
@@ -105,8 +133,7 @@
         })
 
         document.getElementById('open-no-typeahead-btn').addEventListener('click', () => {
-            closeAll()
-            document.getElementById('menu-no-typeahead').classList.remove('hidden')
+            showMenu(document.getElementById('menu-no-typeahead'))
             cleanup = createMenuNavigation(document.getElementById('menu-no-typeahead'), {
                 typeAhead: false,
                 onActivate: (item) => { activateLog.textContent = item.textContent }
@@ -114,8 +141,7 @@
         })
 
         document.getElementById('open-custom-btn').addEventListener('click', () => {
-            closeAll()
-            document.getElementById('menu-custom').classList.remove('hidden')
+            showMenu(document.getElementById('menu-custom'))
             cleanup = createMenuNavigation(document.getElementById('menu-custom'), {
                 itemSelector: '.nav-item',
                 onActivate: (item) => { activateLog.textContent = item.textContent }
@@ -124,7 +150,6 @@
 
         document.getElementById('close-btn').addEventListener('click', closeAll)
 
-        // Expose for cleanup test
         window.closeAll = closeAll
     </script>
 </body>

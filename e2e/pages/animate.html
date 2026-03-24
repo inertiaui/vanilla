@@ -4,25 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Animate</title>
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; }
-        #box { width: 100px; height: 100px; background: #4f46e5; opacity: 0; }
-    </style>
+    <link rel="stylesheet" href="shared.css" />
 </head>
 <body>
-    <h1>Animate</h1>
+    <a href="/" class="back">All demos</a>
+    <h1>Animation</h1>
+    <p class="page-desc">Promise-based wrapper around the Web Animations API with Tailwind CSS easing presets. Cancelled animations resolve gracefully.</p>
 
-    <div id="box"></div>
-
-    <button id="animate-fade-btn">Fade In</button>
-    <button id="animate-custom-btn">Custom Duration</button>
-    <button id="animate-easing-btn">Custom Easing</button>
-    <button id="animate-then-cancel-btn">Animate + Cancel</button>
-    <button id="cancel-btn">Cancel</button>
-
-    <p>Status: <span id="status">idle</span></p>
-    <p>Opacity: <span id="box-opacity">0</span></p>
-    <p>Animations: <span id="animation-count">0</span></p>
+    <section>
+        <h2>Animate the box</h2>
+        <p class="hint">Each button runs a different animation on the box below. Status updates when the promise resolves.</p>
+        <div id="box" class="animate-box" style="opacity:0;"></div>
+        <div class="btn-row">
+            <button id="animate-fade-btn">Fade in (80ms, inOut)</button>
+            <button id="animate-custom-btn">Fade in (50ms, out)</button>
+            <button id="animate-easing-btn">Fade in (80ms, ease-in-out)</button>
+        </div>
+        <div class="btn-row">
+            <button id="animate-then-cancel-btn">Start long + cancel</button>
+            <button id="cancel-btn">Cancel all animations</button>
+        </div>
+        <div class="status-row">
+            <span class="status"><span class="label">Status:</span> <span class="value" id="status">idle</span></span>
+            <span class="status"><span class="label">Opacity:</span> <span class="value" id="box-opacity">0</span></span>
+            <span class="status"><span class="label">Running:</span> <span class="value" id="animation-count">0</span></span>
+        </div>
+    </section>
 
     <script type="module">
         import { animate, cancelAnimations } from '../../src/index.ts'
@@ -69,13 +76,11 @@
         document.getElementById('animate-then-cancel-btn').addEventListener('click', async () => {
             status.textContent = 'running'
             const promise = animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 2000 })
-            // Cancel after a short delay
             setTimeout(() => {
                 cancelAnimations(box)
                 updateAnimationCount()
             }, 50)
             await promise
-            // If we get here, the promise resolved (didn't reject)
             status.textContent = 'resolved'
         })
     </script>

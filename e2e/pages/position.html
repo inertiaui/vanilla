@@ -4,44 +4,57 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Position</title>
+    <link rel="stylesheet" href="shared.css" />
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; min-height: 2000px; }
-        #reference { position: absolute; top: 300px; left: 400px; width: 100px; height: 40px; background: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; }
-        #floating { width: 150px; height: 30px; background: #fbbf24; display: none; z-index: 10; }
-        #reference-bottom { position: absolute; bottom: 20px; left: 400px; width: 100px; height: 40px; background: #dc2626; color: white; display: flex; align-items: center; justify-content: center; }
-        .controls { position: fixed; top: 10px; left: 10px; z-index: 100; background: white; padding: 0.5rem; border: 1px solid #ccc; }
-        .controls button { margin: 2px; font-size: 11px; }
-        .results { position: fixed; top: 10px; right: 10px; z-index: 100; background: white; padding: 0.5rem; border: 1px solid #ccc; font-size: 12px; }
+        body { min-height: 2000px; max-width: none; }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <button id="pos-bottom-start">bottom-start</button>
-        <button id="pos-bottom">bottom</button>
-        <button id="pos-bottom-end">bottom-end</button>
-        <button id="pos-top">top</button>
-        <button id="pos-top-start">top-start</button>
-        <button id="pos-right">right</button>
-        <button id="pos-with-offset">bottom-start +8</button>
-        <button id="pos-flip-btn">flip test</button>
-        <button id="pos-no-flip">no flip</button>
-        <button id="start-auto-btn">start autoUpdate</button>
-        <button id="stop-auto-btn">stop autoUpdate</button>
+    <div class="pos-panel" style="top:10px; left:10px;">
+        <a href="/" class="back" style="margin-bottom:0.5rem">All demos</a>
+        <div style="font-weight:600; margin-bottom:0.5rem;">Placement</div>
+        <div class="btn-row">
+            <button id="pos-bottom-start">bottom-start</button>
+            <button id="pos-bottom">bottom</button>
+            <button id="pos-bottom-end">bottom-end</button>
+        </div>
+        <div class="btn-row">
+            <button id="pos-top">top</button>
+            <button id="pos-top-start">top-start</button>
+            <button id="pos-right">right</button>
+        </div>
+        <div class="btn-row">
+            <button id="pos-with-offset">bottom-start +8px</button>
+        </div>
+        <div style="font-weight:600; margin:0.5rem 0 0.25rem;">Flip behavior</div>
+        <div class="btn-row">
+            <button id="pos-flip-btn">Flip (near bottom ref)</button>
+            <button id="pos-no-flip">No flip</button>
+        </div>
+        <div style="font-weight:600; margin:0.5rem 0 0.25rem;">Auto update</div>
+        <div class="btn-row">
+            <button id="start-auto-btn">Start</button>
+            <button id="stop-auto-btn">Stop</button>
+        </div>
     </div>
 
-    <div class="results">
-        <p>x: <span id="result-x"></span></p>
-        <p>y: <span id="result-y"></span></p>
-        <p>placement: <span id="result-placement"></span></p>
-        <p>style.position: <span id="floating-style-pos"></span></p>
-        <p>style.top: <span id="floating-style-top"></span></p>
-        <p>style.left: <span id="floating-style-left"></span></p>
-        <p>autoUpdate count: <span id="auto-update-count">0</span></p>
+    <div class="pos-panel" style="top:10px; right:10px;">
+        <div style="font-weight:600; margin-bottom:0.5rem;">Result</div>
+        <div>x: <span id="result-x" style="font-family:monospace;">-</span></div>
+        <div>y: <span id="result-y" style="font-family:monospace;">-</span></div>
+        <div>placement: <span id="result-placement" style="font-family:monospace;">-</span></div>
+        <div style="margin-top:0.5rem; font-weight:600;">Inline styles</div>
+        <div>position: <span id="floating-style-pos" style="font-family:monospace;">-</span></div>
+        <div>top: <span id="floating-style-top" style="font-family:monospace;">-</span></div>
+        <div>left: <span id="floating-style-left" style="font-family:monospace;">-</span></div>
+        <div style="margin-top:0.5rem;">
+            <span class="status"><span class="label">autoUpdate:</span> <span class="value" id="auto-update-count">0</span></span>
+        </div>
     </div>
 
-    <div id="reference">Reference</div>
-    <div id="reference-bottom">Near Bottom</div>
-    <div id="floating"></div>
+    <div id="reference" class="pos-reference" style="top:300px; left:400px;">Reference</div>
+    <div id="reference-bottom" class="pos-reference" style="bottom:20px; left:400px; background:#dc2626;">Near bottom</div>
+    <div id="floating" class="pos-floating"></div>
 
     <script type="module">
         import { computePosition, autoUpdate } from '../../src/index.ts'

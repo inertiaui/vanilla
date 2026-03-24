@@ -4,39 +4,61 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Click Outside</title>
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; }
-        .hidden { display: none; }
-        #dropdown, #multi-panel { border: 1px solid #ccc; padding: 1rem; margin-top: 0.5rem; background: #f9f9f9; }
-    </style>
+    <link rel="stylesheet" href="shared.css" />
 </head>
 <body>
+    <a href="/" class="back">All demos</a>
     <h1>Click Outside</h1>
+    <p class="page-desc">Detect clicks outside one or more elements. Supports portals and same-tick protection.</p>
 
-    <!-- Basic dropdown -->
-    <button id="toggle-dropdown">Toggle Dropdown</button>
-    <div id="dropdown" class="hidden">
-        <p>Dropdown content</p>
-        <button id="dropdown-action">Action</button>
-    </div>
-    <p id="click-outside-status">closed</p>
+    <section>
+        <h2>Basic dropdown</h2>
+        <p class="hint">Click the button to open. Click anywhere outside to close. Clicking inside the dropdown keeps it open.</p>
+        <div class="btn-row">
+            <button id="toggle-dropdown">Toggle Dropdown</button>
+        </div>
+        <div id="dropdown" class="panel hidden">
+            <p>Dropdown content</p>
+            <button id="dropdown-action">Action (inside)</button>
+        </div>
+        <div class="status-row">
+            <span class="status"><span class="label">State:</span> <span class="value" id="click-outside-status">closed</span></span>
+        </div>
+    </section>
 
-    <!-- Portal -->
-    <div id="portal" data-inertiaui-portal>
-        <button id="portal-btn">Portal button</button>
-        <div><button id="portal-child">Portal child</button></div>
-    </div>
+    <section>
+        <h2>Portal support</h2>
+        <p class="hint">Open the dropdown above, then click these portal buttons. The dropdown stays open because clicks inside <code>data-inertiaui-portal</code> elements are ignored.</p>
+        <div id="portal" data-inertiaui-portal class="panel" style="border-color: #c084fc;">
+            <button id="portal-btn">Portal button</button>
+            <div><button id="portal-child">Nested portal child</button></div>
+        </div>
+    </section>
 
-    <!-- Multi-target -->
-    <button id="multi-toggle">Toggle Multi</button>
-    <div id="multi-target-1" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Target 1</div>
-    <div id="multi-target-2" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Target 2</div>
-    <p id="multi-status">closed</p>
+    <section>
+        <h2>Multiple elements</h2>
+        <p class="hint">Both target panels are passed as an array. Clicking inside either one keeps the panel open. Clicking outside both closes them.</p>
+        <div class="btn-row">
+            <button id="multi-toggle">Toggle Multi</button>
+        </div>
+        <div id="multi-target-1" class="panel hidden">Target 1</div>
+        <div id="multi-target-2" class="panel hidden">Target 2</div>
+        <div class="status-row">
+            <span class="status"><span class="label">State:</span> <span class="value" id="multi-status">closed</span></span>
+        </div>
+    </section>
 
-    <!-- Same-tick test -->
-    <button id="same-tick-btn">Same Tick Open</button>
-    <div id="same-tick-dropdown" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Same tick dropdown</div>
-    <p id="same-tick-status">closed</p>
+    <section>
+        <h2>Same-tick protection</h2>
+        <p class="hint">The listener is deferred by one tick, so the click that opens the element won't immediately close it. This button opens a dropdown and synchronously dispatches a pointerdown outside.</p>
+        <div class="btn-row">
+            <button id="same-tick-btn">Open + immediate outside click</button>
+        </div>
+        <div id="same-tick-dropdown" class="panel hidden">Same tick dropdown (should stay open)</div>
+        <div class="status-row">
+            <span class="status"><span class="label">State:</span> <span class="value" id="same-tick-status">closed</span></span>
+        </div>
+    </section>
 
     <script type="module">
         import { onClickOutside } from '../../src/index.ts'
@@ -86,7 +108,7 @@
             })
         })
 
-        // Same-tick test: open dropdown and immediately dispatch pointerdown outside
+        // Same-tick test
         const sameTick = document.getElementById('same-tick-dropdown')
         const sameTickStatus = document.getElementById('same-tick-status')
         window.openSameTickDropdown = () => {
@@ -97,7 +119,6 @@
                 sameTickStatus.textContent = 'closed'
                 cleanup?.()
             })
-            // Synchronously dispatch pointerdown outside in the same tick
             document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
         }
 

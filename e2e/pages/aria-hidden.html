@@ -4,23 +4,48 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Aria Hidden</title>
+    <link rel="stylesheet" href="shared.css" />
 </head>
 <body>
+    <a href="/" class="back">All demos</a>
     <h1>Aria Hidden</h1>
+    <p class="page-desc">Manage <code>aria-hidden</code> with reference counting. Multiple marks on the same element are tracked and only fully restored when all are cleaned up.</p>
 
-    <div id="target">Target element</div>
-    <div id="target-with-value" aria-hidden="false">Target with existing value</div>
+    <section>
+        <h2>Target element (no initial value)</h2>
+        <p class="hint">Mark/unmark this element. The attribute is removed on full cleanup since it had no original value.</p>
+        <div id="target" class="panel">Target element</div>
+        <div class="btn-row" style="margin-top:0.75rem">
+            <button id="mark-btn">Mark (by reference)</button>
+            <button id="mark-by-selector-btn">Mark (by selector)</button>
+            <button id="unmark-btn">Unmark</button>
+        </div>
+        <div class="status-row">
+            <span class="status"><span class="label">aria-hidden:</span> <span class="value" id="aria-value">null</span></span>
+        </div>
+    </section>
 
-    <button id="mark-btn">Mark #target</button>
-    <button id="unmark-btn">Unmark #target</button>
-    <button id="mark-by-selector-btn">Mark by selector</button>
-    <button id="mark-existing-btn">Mark #target-with-value</button>
-    <button id="unmark-existing-btn">Unmark #target-with-value</button>
-    <button id="mark-nonexistent-btn">Mark nonexistent</button>
-    <button id="unmark-nonexistent-btn">Unmark nonexistent</button>
+    <section>
+        <h2>Target with existing value</h2>
+        <p class="hint">This element starts with <code>aria-hidden="false"</code>. On full cleanup the original value is restored.</p>
+        <div id="target-with-value" aria-hidden="false" class="panel">Target (aria-hidden="false")</div>
+        <div class="btn-row" style="margin-top:0.75rem">
+            <button id="mark-existing-btn">Mark</button>
+            <button id="unmark-existing-btn">Unmark</button>
+        </div>
+        <div class="status-row">
+            <span class="status"><span class="label">aria-hidden:</span> <span class="value" id="aria-value-existing">false</span></span>
+        </div>
+    </section>
 
-    <p>Target aria-hidden: <span id="aria-value">null</span></p>
-    <p>Existing aria-hidden: <span id="aria-value-existing">false</span></p>
+    <section>
+        <h2>Non-existent selector</h2>
+        <p class="hint">Calling <code>markAriaHidden('#does-not-exist')</code> returns a noop cleanup. No error is thrown.</p>
+        <div class="btn-row">
+            <button id="mark-nonexistent-btn">Mark nonexistent</button>
+            <button id="unmark-nonexistent-btn">Unmark nonexistent</button>
+        </div>
+    </section>
 
     <script type="module">
         import { markAriaHidden } from '../../src/index.ts'
