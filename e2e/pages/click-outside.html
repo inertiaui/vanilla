@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Click Outside</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        .hidden { display: none; }
+        #dropdown { border: 1px solid #ccc; padding: 1rem; margin-top: 0.5rem; background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Click Outside</h1>
+
+    <button id="toggle-dropdown">Toggle Dropdown</button>
+    <div id="dropdown" class="hidden">
+        <p>Dropdown content</p>
+        <button id="dropdown-action">Action</button>
+    </div>
+    <p id="click-outside-status">closed</p>
+
+    <script type="module">
+        import { onClickOutside } from '../../src/index.ts'
+
+        const toggleBtn = document.getElementById('toggle-dropdown')
+        const dropdown = document.getElementById('dropdown')
+        const clickStatus = document.getElementById('click-outside-status')
+        let dropdownCleanup = null
+
+        toggleBtn.addEventListener('click', () => {
+            if (dropdown.classList.contains('hidden')) {
+                dropdown.classList.remove('hidden')
+                clickStatus.textContent = 'open'
+                dropdownCleanup = onClickOutside([toggleBtn, dropdown], () => {
+                    dropdown.classList.add('hidden')
+                    clickStatus.textContent = 'closed'
+                    dropdownCleanup?.()
+                    dropdownCleanup = null
+                })
+            } else {
+                dropdown.classList.add('hidden')
+                clickStatus.textContent = 'closed'
+                dropdownCleanup?.()
+                dropdownCleanup = null
+            }
+        })
+    </script>
+</body>
+</html>
