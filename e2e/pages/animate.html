@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Animate</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        #box { width: 100px; height: 100px; background: #4f46e5; opacity: 0; }
+    </style>
+</head>
+<body>
+    <h1>Animate</h1>
+
+    <div id="box"></div>
+
+    <button id="animate-fade-btn">Fade In</button>
+    <button id="animate-custom-btn">Custom Duration</button>
+    <button id="animate-easing-btn">Custom Easing</button>
+    <button id="animate-then-cancel-btn">Animate + Cancel</button>
+    <button id="cancel-btn">Cancel</button>
+
+    <p>Status: <span id="status">idle</span></p>
+    <p>Opacity: <span id="box-opacity">0</span></p>
+    <p>Animations: <span id="animation-count">0</span></p>
+
+    <script type="module">
+        import { animate, cancelAnimations } from '../../src/index.ts'
+
+        const box = document.getElementById('box')
+        const status = document.getElementById('status')
+        const boxOpacity = document.getElementById('box-opacity')
+        const animationCount = document.getElementById('animation-count')
+
+        function updateOpacity() {
+            boxOpacity.textContent = getComputedStyle(box).opacity
+        }
+
+        function updateAnimationCount() {
+            animationCount.textContent = String(box.getAnimations().length)
+        }
+
+        document.getElementById('animate-fade-btn').addEventListener('click', async () => {
+            status.textContent = 'running'
+            await animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 80 })
+            updateOpacity()
+            status.textContent = 'done'
+        })
+
+        document.getElementById('animate-custom-btn').addEventListener('click', async () => {
+            status.textContent = 'running'
+            await animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 50, easing: 'out', fill: 'forwards' })
+            updateOpacity()
+            status.textContent = 'done'
+        })
+
+        document.getElementById('animate-easing-btn').addEventListener('click', async () => {
+            status.textContent = 'running'
+            await animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 80, easing: 'ease-in-out' })
+            updateOpacity()
+            status.textContent = 'done'
+        })
+
+        document.getElementById('cancel-btn').addEventListener('click', () => {
+            cancelAnimations(box)
+            updateAnimationCount()
+        })
+
+        document.getElementById('animate-then-cancel-btn').addEventListener('click', async () => {
+            status.textContent = 'running'
+            const promise = animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 2000 })
+            // Cancel after a short delay
+            setTimeout(() => {
+                cancelAnimations(box)
+                updateAnimationCount()
+            }, 50)
+            await promise
+            // If we get here, the promise resolved (didn't reject)
+            status.textContent = 'resolved'
+        })
+    </script>
+</body>
+</html>

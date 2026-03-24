@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Helpers</title>
+</head>
+<body>
+    <h1>Helpers</h1>
+
+    <!-- generateId -->
+    <span id="generateId-result1"></span>
+    <span id="generateId-result2"></span>
+    <span id="generateId-custom"></span>
+
+    <!-- except -->
+    <span id="except-obj"></span>
+    <span id="except-arr"></span>
+    <span id="except-case"></span>
+
+    <!-- only -->
+    <span id="only-obj"></span>
+    <span id="only-arr"></span>
+    <span id="only-case"></span>
+
+    <!-- rejectNullValues -->
+    <span id="reject-obj"></span>
+    <span id="reject-arr"></span>
+    <span id="reject-undefined"></span>
+
+    <!-- kebabCase -->
+    <span id="kebab-camel"></span>
+    <span id="kebab-pascal"></span>
+    <span id="kebab-acronym"></span>
+    <span id="kebab-spaces"></span>
+    <span id="kebab-empty"></span>
+    <span id="kebab-snake"></span>
+
+    <!-- isStandardDomEvent -->
+    <span id="isEvent-click"></span>
+    <span id="isEvent-custom"></span>
+    <span id="isEvent-case"></span>
+
+    <!-- sameUrlPath -->
+    <span id="sameUrl-same"></span>
+    <span id="sameUrl-query"></span>
+    <span id="sameUrl-diff"></span>
+    <span id="sameUrl-null"></span>
+
+    <script type="module">
+        import {
+            generateId, except, only, rejectNullValues,
+            kebabCase, isStandardDomEvent, sameUrlPath,
+        } from '../../src/index.ts'
+
+        const set = (id, value) => document.getElementById(id).textContent = typeof value === 'string' ? value : JSON.stringify(value)
+
+        // generateId
+        set('generateId-result1', generateId())
+        set('generateId-result2', generateId())
+        set('generateId-custom', generateId('test_'))
+
+        // except
+        set('except-obj', except({ a: 1, b: 2, c: 3 }, ['b']))
+        set('except-arr', except(['a', 'b', 'c'], ['b']))
+        set('except-case', except({ Name: 1, AGE: 2, city: 3 }, ['name', 'age'], true))
+
+        // only
+        set('only-obj', only({ a: 1, b: 2, c: 3 }, ['a', 'c']))
+        set('only-arr', only(['a', 'b', 'c', 'd'], ['b', 'd']))
+        set('only-case', only({ Name: 1, AGE: 2, city: 3 }, ['name', 'city'], true))
+
+        // rejectNullValues
+        set('reject-obj', rejectNullValues({ a: 1, b: null, c: 3 }))
+        set('reject-arr', rejectNullValues([1, null, 3, null, 5]))
+        set('reject-undefined', rejectNullValues({ a: 1, b: null, c: undefined, d: 3 }))
+
+        // kebabCase
+        set('kebab-camel', kebabCase('camelCase'))
+        set('kebab-pascal', kebabCase('PascalCase'))
+        set('kebab-acronym', kebabCase('HTMLElement'))
+        set('kebab-spaces', kebabCase('hello world'))
+        set('kebab-empty', kebabCase(''))
+        set('kebab-snake', kebabCase('snake_case'))
+
+        // isStandardDomEvent
+        set('isEvent-click', String(isStandardDomEvent('onClick')))
+        set('isEvent-custom', String(isStandardDomEvent('onCustomEvent')))
+        set('isEvent-case', String(isStandardDomEvent('ONCLICK')))
+
+        // sameUrlPath
+        set('sameUrl-same', String(sameUrlPath('/users/1', '/users/1')))
+        set('sameUrl-query', String(sameUrlPath('/users/1', '/users/1?tab=posts')))
+        set('sameUrl-diff', String(sameUrlPath('/users/1', '/users/2')))
+        set('sameUrl-null', String(sameUrlPath(null, '/users')))
+    </script>
+</body>
+</html>

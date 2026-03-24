@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scroll Lock</title>
+    <style>
+        body { min-height: 2000px; font-family: system-ui, sans-serif; margin: 2rem; }
+    </style>
+</head>
+<body>
+    <h1>Scroll Lock</h1>
+
+    <button id="lock-btn">Lock</button>
+    <button id="unlock-btn">Unlock</button>
+    <button id="set-overflow-auto">Set overflow auto</button>
+
+    <p>Lock count: <span id="lock-count">0</span></p>
+    <p>Overflow: <span id="overflow-value"></span></p>
+    <p>Padding: <span id="padding-value"></span></p>
+
+    <script type="module">
+        import { lockScroll } from '../../src/index.ts'
+
+        const cleanups = []
+        const lockCount = document.getElementById('lock-count')
+        const overflowValue = document.getElementById('overflow-value')
+        const paddingValue = document.getElementById('padding-value')
+
+        function updateDisplay() {
+            lockCount.textContent = String(cleanups.length)
+            overflowValue.textContent = document.body.style.overflow
+            paddingValue.textContent = document.body.style.paddingRight
+        }
+
+        updateDisplay()
+
+        document.getElementById('lock-btn').addEventListener('click', () => {
+            cleanups.push(lockScroll())
+            updateDisplay()
+        })
+
+        document.getElementById('unlock-btn').addEventListener('click', () => {
+            const fn = cleanups.pop()
+            fn?.()
+            updateDisplay()
+        })
+
+        document.getElementById('set-overflow-auto').addEventListener('click', () => {
+            document.body.style.overflow = 'auto'
+            updateDisplay()
+        })
+    </script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Escape Key</title>
+</head>
+<body>
+    <h1>Escape Key</h1>
+
+    <button id="register-btn">Register</button>
+    <button id="register-prevent-btn">Register preventDefault</button>
+    <button id="register-stop-btn">Register stopPropagation</button>
+    <button id="unregister-btn">Unregister</button>
+
+    <p>Count: <span id="escape-count">0</span></p>
+    <p>Propagation: <span id="propagation-log">none</span></p>
+
+    <script type="module">
+        import { onEscapeKey } from '../../src/index.ts'
+
+        let count = 0
+        let cleanup = null
+        const countEl = document.getElementById('escape-count')
+        const propagationLog = document.getElementById('propagation-log')
+
+        // A window-level listener in the capture phase to detect propagation
+        // onEscapeKey uses document-level keydown, so stopPropagation prevents
+        // the event from reaching window in the bubbling phase
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                propagationLog.textContent = 'propagated'
+            }
+        })
+
+        document.getElementById('register-btn').addEventListener('click', () => {
+            cleanup?.()
+            count = 0
+            countEl.textContent = '0'
+            cleanup = onEscapeKey(() => {
+                count++
+                countEl.textContent = String(count)
+            })
+        })
+
+        document.getElementById('register-prevent-btn').addEventListener('click', () => {
+            cleanup?.()
+            count = 0
+            countEl.textContent = '0'
+            cleanup = onEscapeKey(() => {
+                count++
+                countEl.textContent = String(count)
+            }, { preventDefault: true })
+        })
+
+        document.getElementById('register-stop-btn').addEventListener('click', () => {
+            cleanup?.()
+            count = 0
+            countEl.textContent = '0'
+            propagationLog.textContent = 'none'
+            cleanup = onEscapeKey(() => {
+                count++
+                countEl.textContent = String(count)
+            }, { stopPropagation: true })
+        })
+
+        document.getElementById('unregister-btn').addEventListener('click', () => {
+            cleanup?.()
+            cleanup = null
+        })
+    </script>
+</body>
+</html>

@@ -921,6 +921,51 @@ Useful for determining active navigation states or comparing the current route w
 const isActive = sameUrlPath(window.location.href, linkHref)
 ```
 
+## Development
+
+### Running the dev server
+
+Start Vite to browse the interactive test pages:
+
+```bash
+npx vite --port 3333
+```
+
+Then open `http://localhost:3333` for an overview linking to all test pages.
+
+### Running E2E tests
+
+The test suite uses Playwright with Chromium. It automatically starts a Vite dev server:
+
+```bash
+npm run test:e2e
+```
+
+Run a single spec:
+
+```bash
+npx playwright test e2e/menu.spec.ts
+```
+
+Run tests matching a name:
+
+```bash
+npx playwright test -g "ArrowDown"
+```
+
+### Test structure
+
+Each feature has a spec file and a matching HTML page:
+
+```
+e2e/click-outside.spec.ts  →  e2e/pages/click-outside.html
+e2e/menu.spec.ts           →  e2e/pages/menu.html
+e2e/focus-trap.spec.ts     →  e2e/pages/focus-trap.html
+...
+```
+
+The mapping is handled by a custom fixture in `e2e/test.ts`. HTML pages import directly from the TypeScript source via Vite.
+
 ## TypeScript
 
 This library is written in TypeScript and exports the following types:

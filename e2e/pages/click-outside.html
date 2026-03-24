@@ -7,12 +7,13 @@
     <style>
         body { font-family: system-ui, sans-serif; margin: 2rem; }
         .hidden { display: none; }
-        #dropdown { border: 1px solid #ccc; padding: 1rem; margin-top: 0.5rem; background: #f9f9f9; }
+        #dropdown, #multi-panel { border: 1px solid #ccc; padding: 1rem; margin-top: 0.5rem; background: #f9f9f9; }
     </style>
 </head>
 <body>
     <h1>Click Outside</h1>
 
+    <!-- Basic dropdown -->
     <button id="toggle-dropdown">Toggle Dropdown</button>
     <div id="dropdown" class="hidden">
         <p>Dropdown content</p>
@@ -20,9 +21,27 @@
     </div>
     <p id="click-outside-status">closed</p>
 
+    <!-- Portal -->
+    <div id="portal" data-inertiaui-portal>
+        <button id="portal-btn">Portal button</button>
+        <div><button id="portal-child">Portal child</button></div>
+    </div>
+
+    <!-- Multi-target -->
+    <button id="multi-toggle">Toggle Multi</button>
+    <div id="multi-target-1" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Target 1</div>
+    <div id="multi-target-2" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Target 2</div>
+    <p id="multi-status">closed</p>
+
+    <!-- Same-tick test -->
+    <button id="same-tick-btn">Same Tick Open</button>
+    <div id="same-tick-dropdown" class="hidden" style="border:1px solid #ccc; padding:0.5rem;">Same tick dropdown</div>
+    <p id="same-tick-status">closed</p>
+
     <script type="module">
         import { onClickOutside } from '../../src/index.ts'
 
+        // Basic dropdown
         const toggleBtn = document.getElementById('toggle-dropdown')
         const dropdown = document.getElementById('dropdown')
         const clickStatus = document.getElementById('click-outside-status')
@@ -44,6 +63,46 @@
                 dropdownCleanup?.()
                 dropdownCleanup = null
             }
+        })
+
+        // Multi-target
+        const multiToggle = document.getElementById('multi-toggle')
+        const multiTarget1 = document.getElementById('multi-target-1')
+        const multiTarget2 = document.getElementById('multi-target-2')
+        const multiStatus = document.getElementById('multi-status')
+        let multiCleanup = null
+
+        multiToggle.addEventListener('click', () => {
+            multiTarget1.classList.remove('hidden')
+            multiTarget2.classList.remove('hidden')
+            multiStatus.textContent = 'open'
+            multiCleanup?.()
+            multiCleanup = onClickOutside([multiToggle, multiTarget1, multiTarget2], () => {
+                multiTarget1.classList.add('hidden')
+                multiTarget2.classList.add('hidden')
+                multiStatus.textContent = 'closed'
+                multiCleanup?.()
+                multiCleanup = null
+            })
+        })
+
+        // Same-tick test: open dropdown and immediately dispatch pointerdown outside
+        const sameTick = document.getElementById('same-tick-dropdown')
+        const sameTickStatus = document.getElementById('same-tick-status')
+        window.openSameTickDropdown = () => {
+            sameTick.classList.remove('hidden')
+            sameTickStatus.textContent = 'open'
+            const cleanup = onClickOutside(sameTick, () => {
+                sameTick.classList.add('hidden')
+                sameTickStatus.textContent = 'closed'
+                cleanup?.()
+            })
+            // Synchronously dispatch pointerdown outside in the same tick
+            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        }
+
+        document.getElementById('same-tick-btn').addEventListener('click', () => {
+            window.openSameTickDropdown()
         })
     </script>
 </body>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Focus Trap</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        .hidden { display: none; }
+        .dialog { border: 2px solid #333; padding: 1rem; margin: 1rem 0; background: #f9f9f9; }
+        .dialog-nested { border: 2px solid #c00; padding: 1rem; margin: 1rem 0; background: #fff0f0; }
+    </style>
+</head>
+<body>
+    <h1>Focus Trap</h1>
+
+    <button id="outside-btn">Outside Button</button>
+    <button id="open-dialog-btn">Open Dialog</button>
+    <button id="open-no-return-btn">Open (no returnFocus)</button>
+    <button id="open-custom-focus-btn">Open (custom focus)</button>
+
+    <div id="dialog-1" class="dialog hidden">
+        <h2>Dialog 1</h2>
+        <button id="d1-first">First</button>
+        <input id="d1-input" type="text" placeholder="Input" />
+        <button id="open-nested-btn">Open Nested</button>
+        <button id="d1-last">Last</button>
+        <button id="close-dialog-btn">Close Dialog</button>
+    </div>
+
+    <div id="dialog-2" class="dialog-nested hidden">
+        <h2>Dialog 2 (Nested)</h2>
+        <button id="d2-first">Nested First</button>
+        <button id="d2-last">Nested Last</button>
+        <button id="close-nested-btn">Close Nested</button>
+    </div>
+
+    <p>Active: <span id="focus-status">none</span></p>
+
+    <script type="module">
+        import { createFocusTrap } from '../../src/index.ts'
+
+        const focusStatus = document.getElementById('focus-status')
+        document.addEventListener('focusin', () => {
+            focusStatus.textContent = document.activeElement?.id || document.activeElement?.tagName || 'none'
+        })
+
+        const dialog1 = document.getElementById('dialog-1')
+        const dialog2 = document.getElementById('dialog-2')
+        let dialog1Cleanup = null
+        let dialog2Cleanup = null
+
+        function openDialog(options = {}) {
+            dialog1.classList.remove('hidden')
+            dialog1Cleanup = createFocusTrap(dialog1, options)
+        }
+
+        function closeDialog() {
+            dialog1Cleanup?.()
+            dialog1Cleanup = null
+            dialog1.classList.add('hidden')
+        }
+
+        function openNested() {
+            dialog2.classList.remove('hidden')
+            dialog2Cleanup = createFocusTrap(dialog2)
+        }
+
+        function closeNested() {
+            dialog2Cleanup?.()
+            dialog2Cleanup = null
+            dialog2.classList.add('hidden')
+        }
+
+        document.getElementById('open-dialog-btn').addEventListener('click', () => openDialog())
+        document.getElementById('open-no-return-btn').addEventListener('click', () => openDialog({ returnFocus: false }))
+        document.getElementById('open-custom-focus-btn').addEventListener('click', () => openDialog({ initialFocusElement: document.getElementById('d1-input') }))
+        document.getElementById('close-dialog-btn').addEventListener('click', closeDialog)
+        document.getElementById('open-nested-btn').addEventListener('click', openNested)
+        document.getElementById('close-nested-btn').addEventListener('click', closeNested)
+
+        // Expose for idempotent test
+        window.closeDialog = closeDialog
+    </script>
+</body>
+</html>
