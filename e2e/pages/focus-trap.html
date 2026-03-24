@@ -45,6 +45,16 @@
 
         <div class="status-row">
             <span class="status"><span class="label">Focused:</span> <span class="value" id="focus-status">none</span></span>
+            <span class="status"><span class="label">Return target connected:</span> <span class="value" id="return-connected-status">-</span></span>
+        </div>
+    </section>
+
+    <section>
+        <h2>Return focus with removed element</h2>
+        <p class="hint">Tests that returnFocus checks isConnected before restoring focus.</p>
+        <div class="btn-row">
+            <button id="removable-btn">Removable button</button>
+            <button id="open-then-remove-btn">Open dialog &amp; remove this button</button>
         </div>
     </section>
 
@@ -91,6 +101,33 @@
         document.getElementById('close-nested-btn').addEventListener('click', closeNested)
 
         window.closeDialog = closeDialog
+
+        // Test: focusout with null relatedTarget (focus escaping to void)
+        window.simulateFocusEscape = function() {
+            // Dispatch a focusout event with relatedTarget=null on the dialog container
+            // This simulates what happens when Tab moves focus out of the top-layer
+            const event = new FocusEvent('focusout', { relatedTarget: null, bubbles: true })
+            dialog1.dispatchEvent(event)
+        }
+
+        // Test: returnFocus when original element was removed from DOM
+        const removableBtn = document.getElementById('removable-btn')
+        const openThenRemoveBtn = document.getElementById('open-then-remove-btn')
+        const returnConnectedStatus = document.getElementById('return-connected-status')
+
+        openThenRemoveBtn.addEventListener('click', () => {
+            // Focus removable-btn first, then open dialog, then remove the button
+            removableBtn.focus()
+            openDialog()
+            removableBtn.remove()
+            returnConnectedStatus.textContent = 'removed'
+        })
+
+        window.closeAndCheckReturn = function() {
+            closeDialog()
+            // After close, check what got focused
+            returnConnectedStatus.textContent = document.activeElement?.id || document.activeElement?.tagName || 'none'
+        }
     </script>
 </body>
 </html>

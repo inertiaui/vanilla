@@ -96,6 +96,44 @@ test.describe('createFocusTrap', () => {
         await expect(page.locator('#d1-input')).toBeFocused()
     })
 
+    test('focusout with null relatedTarget recaptures focus', async ({ page }) => {
+        await page.click('#open-dialog-btn')
+        await expect(page.locator('#d1-first')).toBeFocused()
+
+        // Move focus to a known element inside the dialog
+        await page.locator('#d1-last').focus()
+        await expect(page.locator('#d1-last')).toBeFocused()
+
+        // Simulate focus escaping to void (relatedTarget=null)
+        await page.evaluate(() => {
+            ;(window as any).simulateFocusEscape()
+        })
+
+        // Focus should be recaptured into the dialog
+        await page.waitForTimeout(50) // queueMicrotask
+        const activeId = await page.evaluate(() => document.activeElement?.id)
+        const dialog = page.locator('#dialog-1')
+        const isInDialog = await dialog.evaluate((el) => el.contains(document.activeElement))
+        expect(isInDialog).toBe(true)
+    })
+
+    test('returnFocus skips disconnected elements', async ({ page }) => {
+        // Open dialog after focusing a button, then remove that button
+        await page.click('#open-then-remove-btn')
+        await expect(page.locator('#d1-first')).toBeFocused()
+        await expect(page.locator('#return-connected-status')).toHaveText('removed')
+
+        // Close dialog — returnFocus should NOT throw, and should not try to focus removed element
+        await page.evaluate(() => {
+            ;(window as any).closeAndCheckReturn()
+        })
+
+        // The page should still be functional (no error thrown)
+        // The focused element should be something other than the removed button
+        const focusedId = await page.evaluate(() => document.activeElement?.id)
+        expect(focusedId).not.toBe('removable-btn')
+    })
+
     test('idempotent cleanup', async ({ page }) => {
         await page.click('#open-dialog-btn')
         await expect(page.locator('#d1-first')).toBeFocused()

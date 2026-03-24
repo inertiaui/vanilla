@@ -123,6 +123,25 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
 
     focusTrapStack.push(entry)
 
+    // Handle focus escaping the trap entirely (e.g. Tab at boundary in some browsers)
+    function handleFocusOut(event: FocusEvent) {
+        if (event.relatedTarget !== null) {
+            return
+        }
+
+        // Focus went to void — recapture it
+        queueMicrotask(() => {
+            if (!container.contains(container.ownerDocument.activeElement)) {
+                const focusableElements = getFocusableElements(container)
+                if (focusableElements.length > 0) {
+                    focusableElements[0].focus()
+                }
+            }
+        })
+    }
+
+    container.addEventListener('focusout', handleFocusOut)
+
     let rafId: number | undefined
     if (initialFocus) {
         rafId = requestAnimationFrame(() => {
@@ -149,6 +168,8 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
             cancelAnimationFrame(rafId)
         }
 
+        container.removeEventListener('focusout', handleFocusOut)
+
         const index = focusTrapStack.indexOf(entry)
         if (index >= 0) {
             focusTrapStack.splice(index, 1)
@@ -159,7 +180,7 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
             document.removeEventListener('focusin', handleTrapFocusIn)
         }
 
-        if (returnFocus && previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        if (returnFocus && previouslyFocused && typeof previouslyFocused.focus === 'function' && previouslyFocused.isConnected) {
             previouslyFocused.focus()
         }
     }
