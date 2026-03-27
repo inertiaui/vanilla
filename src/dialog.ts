@@ -180,7 +180,12 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
             document.removeEventListener('focusin', handleTrapFocusIn)
         }
 
-        if (returnFocus && previouslyFocused && typeof previouslyFocused.focus === 'function' && previouslyFocused.isConnected) {
+        if (
+            returnFocus &&
+            previouslyFocused &&
+            typeof previouslyFocused.focus === 'function' &&
+            previouslyFocused.isConnected
+        ) {
             previouslyFocused.focus()
         }
     }

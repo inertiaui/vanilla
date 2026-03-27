@@ -321,11 +321,7 @@ export function computePosition(
     return result
 }
 
-export function autoUpdate(
-    reference: HTMLElement,
-    floating: HTMLElement,
-    update: () => void,
-): CleanupFunction {
+export function autoUpdate(reference: HTMLElement, floating: HTMLElement, update: () => void): CleanupFunction {
     let rafId: number | undefined
 
     function scheduleUpdate() {

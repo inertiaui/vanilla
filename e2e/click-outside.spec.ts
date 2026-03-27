@@ -67,7 +67,7 @@ test.describe('onClickOutside', () => {
     test('should not fire on same-tick clicks (setTimeout protection)', async ({ page }) => {
         // Use evaluate to open and dispatch in the same JS tick
         await page.evaluate(() => {
-            (window as any).openSameTickDropdown()
+            ;(window as any).openSameTickDropdown()
         })
 
         await expect(page.locator('#same-tick-status')).toHaveText('open')

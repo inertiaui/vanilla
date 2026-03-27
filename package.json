@@ -37,8 +37,8 @@
         "dev": "vite build --watch",
         "build": "vite build",
         "lint": "eslint src/",
-        "format": "prettier --write src/ tests/",
-        "format:check": "prettier --check src/ tests/",
+        "format": "prettier --write src/ e2e/",
+        "format:check": "prettier --check src/ e2e/",
         "test": "vitest",
         "test:e2e": "playwright test",
         "prepublishOnly": "npm run build"

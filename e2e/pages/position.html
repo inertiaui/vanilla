@@ -1,122 +1,149 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Position</title>
-    <link rel="stylesheet" href="shared.css" />
-    <style>
-        body { min-height: 2000px; max-width: none; }
-    </style>
-</head>
-<body>
-    <div class="pos-panel" style="top:10px; left:10px;">
-        <a href="/" class="back" style="margin-bottom:0.5rem">All demos</a>
-        <div style="font-weight:600; margin-bottom:0.5rem;">Placement</div>
-        <div class="btn-row">
-            <button id="pos-bottom-start">bottom-start</button>
-            <button id="pos-bottom">bottom</button>
-            <button id="pos-bottom-end">bottom-end</button>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Position</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            body {
+                min-height: 2000px;
+                max-width: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="pos-panel" style="top: 10px; left: 10px">
+            <a href="/" class="back" style="margin-bottom: 0.5rem">All demos</a>
+            <div style="font-weight: 600; margin-bottom: 0.5rem">Placement</div>
+            <div class="btn-row">
+                <button id="pos-bottom-start">bottom-start</button>
+                <button id="pos-bottom">bottom</button>
+                <button id="pos-bottom-end">bottom-end</button>
+            </div>
+            <div class="btn-row">
+                <button id="pos-top">top</button>
+                <button id="pos-top-start">top-start</button>
+                <button id="pos-right">right</button>
+            </div>
+            <div class="btn-row">
+                <button id="pos-with-offset">bottom-start +8px</button>
+            </div>
+            <div style="font-weight: 600; margin: 0.5rem 0 0.25rem">Flip behavior</div>
+            <div class="btn-row">
+                <button id="pos-flip-btn">Flip (near bottom ref)</button>
+                <button id="pos-no-flip">No flip</button>
+            </div>
+            <div style="font-weight: 600; margin: 0.5rem 0 0.25rem">Auto update</div>
+            <div class="btn-row">
+                <button id="start-auto-btn">Start</button>
+                <button id="stop-auto-btn">Stop</button>
+            </div>
         </div>
-        <div class="btn-row">
-            <button id="pos-top">top</button>
-            <button id="pos-top-start">top-start</button>
-            <button id="pos-right">right</button>
+
+        <div class="pos-panel" style="top: 10px; right: 10px">
+            <div style="font-weight: 600; margin-bottom: 0.5rem">Result</div>
+            <div>x: <span id="result-x" style="font-family: monospace">-</span></div>
+            <div>y: <span id="result-y" style="font-family: monospace">-</span></div>
+            <div>placement: <span id="result-placement" style="font-family: monospace">-</span></div>
+            <div style="margin-top: 0.5rem; font-weight: 600">Inline styles</div>
+            <div>position: <span id="floating-style-pos" style="font-family: monospace">-</span></div>
+            <div>top: <span id="floating-style-top" style="font-family: monospace">-</span></div>
+            <div>left: <span id="floating-style-left" style="font-family: monospace">-</span></div>
+            <div style="margin-top: 0.5rem">
+                <span class="status"
+                    ><span class="label">autoUpdate:</span> <span class="value" id="auto-update-count">0</span></span
+                >
+            </div>
         </div>
-        <div class="btn-row">
-            <button id="pos-with-offset">bottom-start +8px</button>
+
+        <div id="reference" class="pos-reference" style="top: 300px; left: 400px">Reference</div>
+        <div id="reference-bottom" class="pos-reference" style="bottom: 20px; left: 400px; background: #dc2626">
+            Near bottom
         </div>
-        <div style="font-weight:600; margin:0.5rem 0 0.25rem;">Flip behavior</div>
-        <div class="btn-row">
-            <button id="pos-flip-btn">Flip (near bottom ref)</button>
-            <button id="pos-no-flip">No flip</button>
-        </div>
-        <div style="font-weight:600; margin:0.5rem 0 0.25rem;">Auto update</div>
-        <div class="btn-row">
-            <button id="start-auto-btn">Start</button>
-            <button id="stop-auto-btn">Stop</button>
-        </div>
-    </div>
+        <div id="floating" class="pos-floating"></div>
 
-    <div class="pos-panel" style="top:10px; right:10px;">
-        <div style="font-weight:600; margin-bottom:0.5rem;">Result</div>
-        <div>x: <span id="result-x" style="font-family:monospace;">-</span></div>
-        <div>y: <span id="result-y" style="font-family:monospace;">-</span></div>
-        <div>placement: <span id="result-placement" style="font-family:monospace;">-</span></div>
-        <div style="margin-top:0.5rem; font-weight:600;">Inline styles</div>
-        <div>position: <span id="floating-style-pos" style="font-family:monospace;">-</span></div>
-        <div>top: <span id="floating-style-top" style="font-family:monospace;">-</span></div>
-        <div>left: <span id="floating-style-left" style="font-family:monospace;">-</span></div>
-        <div style="margin-top:0.5rem;">
-            <span class="status"><span class="label">autoUpdate:</span> <span class="value" id="auto-update-count">0</span></span>
-        </div>
-    </div>
+        <script type="module">
+            import { computePosition, autoUpdate } from '../../src/index.ts'
 
-    <div id="reference" class="pos-reference" style="top:300px; left:400px;">Reference</div>
-    <div id="reference-bottom" class="pos-reference" style="bottom:20px; left:400px; background:#dc2626;">Near bottom</div>
-    <div id="floating" class="pos-floating"></div>
+            const reference = document.getElementById('reference')
+            const referenceBottom = document.getElementById('reference-bottom')
+            const floating = document.getElementById('floating')
+            const resultX = document.getElementById('result-x')
+            const resultY = document.getElementById('result-y')
+            const resultPlacement = document.getElementById('result-placement')
+            const floatingStylePos = document.getElementById('floating-style-pos')
+            const floatingStyleTop = document.getElementById('floating-style-top')
+            const floatingStyleLeft = document.getElementById('floating-style-left')
+            const autoUpdateCount = document.getElementById('auto-update-count')
 
-    <script type="module">
-        import { computePosition, autoUpdate } from '../../src/index.ts'
+            let autoCleanup = null
+            let updateCount = 0
 
-        const reference = document.getElementById('reference')
-        const referenceBottom = document.getElementById('reference-bottom')
-        const floating = document.getElementById('floating')
-        const resultX = document.getElementById('result-x')
-        const resultY = document.getElementById('result-y')
-        const resultPlacement = document.getElementById('result-placement')
-        const floatingStylePos = document.getElementById('floating-style-pos')
-        const floatingStyleTop = document.getElementById('floating-style-top')
-        const floatingStyleLeft = document.getElementById('floating-style-left')
-        const autoUpdateCount = document.getElementById('auto-update-count')
+            function showResult(result) {
+                floating.style.display = 'block'
+                resultX.textContent = String(Math.round(result.x))
+                resultY.textContent = String(Math.round(result.y))
+                resultPlacement.textContent = result.placement
+                floatingStylePos.textContent = floating.style.position
+                floatingStyleTop.textContent = floating.style.top
+                floatingStyleLeft.textContent = floating.style.left
+            }
 
-        let autoCleanup = null
-        let updateCount = 0
+            function positionWith(ref, options) {
+                floating.style.top = ''
+                floating.style.left = ''
+                floating.style.position = ''
+                const result = computePosition(ref, floating, options)
+                showResult(result)
+            }
 
-        function showResult(result) {
-            floating.style.display = 'block'
-            resultX.textContent = String(Math.round(result.x))
-            resultY.textContent = String(Math.round(result.y))
-            resultPlacement.textContent = result.placement
-            floatingStylePos.textContent = floating.style.position
-            floatingStyleTop.textContent = floating.style.top
-            floatingStyleLeft.textContent = floating.style.left
-        }
+            document
+                .getElementById('pos-bottom-start')
+                .addEventListener('click', () => positionWith(reference, { placement: 'bottom-start' }))
+            document
+                .getElementById('pos-bottom')
+                .addEventListener('click', () => positionWith(reference, { placement: 'bottom' }))
+            document
+                .getElementById('pos-bottom-end')
+                .addEventListener('click', () => positionWith(reference, { placement: 'bottom-end' }))
+            document
+                .getElementById('pos-top')
+                .addEventListener('click', () => positionWith(reference, { placement: 'top' }))
+            document
+                .getElementById('pos-top-start')
+                .addEventListener('click', () => positionWith(reference, { placement: 'top-start' }))
+            document
+                .getElementById('pos-right')
+                .addEventListener('click', () => positionWith(reference, { placement: 'right' }))
+            document
+                .getElementById('pos-with-offset')
+                .addEventListener('click', () => positionWith(reference, { placement: 'bottom-start', offset: 8 }))
+            document
+                .getElementById('pos-flip-btn')
+                .addEventListener('click', () => positionWith(referenceBottom, { placement: 'bottom-start' }))
+            document
+                .getElementById('pos-no-flip')
+                .addEventListener('click', () =>
+                    positionWith(referenceBottom, { placement: 'bottom-start', flip: false }),
+                )
 
-        function positionWith(ref, options) {
-            floating.style.top = ''
-            floating.style.left = ''
-            floating.style.position = ''
-            const result = computePosition(ref, floating, options)
-            showResult(result)
-        }
-
-        document.getElementById('pos-bottom-start').addEventListener('click', () => positionWith(reference, { placement: 'bottom-start' }))
-        document.getElementById('pos-bottom').addEventListener('click', () => positionWith(reference, { placement: 'bottom' }))
-        document.getElementById('pos-bottom-end').addEventListener('click', () => positionWith(reference, { placement: 'bottom-end' }))
-        document.getElementById('pos-top').addEventListener('click', () => positionWith(reference, { placement: 'top' }))
-        document.getElementById('pos-top-start').addEventListener('click', () => positionWith(reference, { placement: 'top-start' }))
-        document.getElementById('pos-right').addEventListener('click', () => positionWith(reference, { placement: 'right' }))
-        document.getElementById('pos-with-offset').addEventListener('click', () => positionWith(reference, { placement: 'bottom-start', offset: 8 }))
-        document.getElementById('pos-flip-btn').addEventListener('click', () => positionWith(referenceBottom, { placement: 'bottom-start' }))
-        document.getElementById('pos-no-flip').addEventListener('click', () => positionWith(referenceBottom, { placement: 'bottom-start', flip: false }))
-
-        document.getElementById('start-auto-btn').addEventListener('click', () => {
-            autoCleanup?.()
-            updateCount = 0
-            autoUpdateCount.textContent = '0'
-            floating.style.display = 'block'
-            autoCleanup = autoUpdate(reference, floating, () => {
-                updateCount++
-                autoUpdateCount.textContent = String(updateCount)
-                computePosition(reference, floating, { placement: 'bottom-start' })
+            document.getElementById('start-auto-btn').addEventListener('click', () => {
+                autoCleanup?.()
+                updateCount = 0
+                autoUpdateCount.textContent = '0'
+                floating.style.display = 'block'
+                autoCleanup = autoUpdate(reference, floating, () => {
+                    updateCount++
+                    autoUpdateCount.textContent = String(updateCount)
+                    computePosition(reference, floating, { placement: 'bottom-start' })
+                })
             })
-        })
 
-        document.getElementById('stop-auto-btn').addEventListener('click', () => {
-            autoCleanup?.()
-            autoCleanup = null
-        })
-    </script>
-</body>
+            document.getElementById('stop-auto-btn').addEventListener('click', () => {
+                autoCleanup?.()
+                autoCleanup = null
+            })
+        </script>
+    </body>
 </html>

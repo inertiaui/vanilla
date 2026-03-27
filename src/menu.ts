@@ -8,10 +8,7 @@ export interface MenuNavigationOptions {
     onActivate?: (item: HTMLElement) => void
 }
 
-export function createMenuNavigation(
-    container: HTMLElement,
-    options: MenuNavigationOptions = {},
-): CleanupFunction {
+export function createMenuNavigation(container: HTMLElement, options: MenuNavigationOptions = {}): CleanupFunction {
     const {
         itemSelector = '[role="menuitem"]:not([disabled]):not([aria-disabled="true"])',
         orientation = 'vertical',

@@ -37,6 +37,7 @@ test.describe('createMenuNavigation', () => {
 
         test('ArrowUp moves focus to previous item', async ({ page }) => {
             await page.click('#open-vertical-btn')
+            await expect(page.locator('#v-item-0')).toBeFocused()
             await page.locator('#v-item-4').focus()
 
             await page.keyboard.press('ArrowUp')
@@ -46,6 +47,7 @@ test.describe('createMenuNavigation', () => {
 
         test('loops from last to first', async ({ page }) => {
             await page.click('#open-vertical-btn')
+            await expect(page.locator('#v-item-0')).toBeFocused()
             await page.locator('#v-item-4').focus()
 
             await page.keyboard.press('ArrowDown')
@@ -62,6 +64,7 @@ test.describe('createMenuNavigation', () => {
 
         test('Home focuses first item', async ({ page }) => {
             await page.click('#open-vertical-btn')
+            await expect(page.locator('#v-item-0')).toBeFocused()
             await page.locator('#v-item-4').focus()
 
             await page.keyboard.press('Home')
@@ -80,6 +83,7 @@ test.describe('createMenuNavigation', () => {
     test.describe('activation', () => {
         test('Enter activates focused item', async ({ page }) => {
             await page.click('#open-vertical-btn')
+            await expect(page.locator('#v-item-0')).toBeFocused()
             await page.locator('#v-item-1').focus()
 
             await page.keyboard.press('Enter')
@@ -88,7 +92,7 @@ test.describe('createMenuNavigation', () => {
 
         test('Space activates focused item', async ({ page }) => {
             await page.click('#open-vertical-btn')
-            await page.locator('#v-item-0').focus()
+            await expect(page.locator('#v-item-0')).toBeFocused()
 
             await page.keyboard.press(' ')
             await expect(page.locator('#activate-log')).toHaveText('apple')
@@ -154,6 +158,7 @@ test.describe('createMenuNavigation', () => {
             await expect(page.locator('#nl-item-0')).toBeFocused()
 
             // Navigate to last
+            await expect(page.locator('#nl-item-0')).toBeFocused()
             await page.locator('#nl-item-2').focus()
 
             // ArrowDown at last item should stay
