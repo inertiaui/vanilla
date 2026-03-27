@@ -19,8 +19,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
 
       - run: npm run format:check
       - run: npm run lint
       - run: npm run build
-      - run: npm test -- --run
+      - run: npm run test:e2e
