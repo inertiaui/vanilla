@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Scroll Lock</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            body {
+                min-height: 2000px;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Scroll Lock</h1>
+        <p class="page-desc">Lock body scroll with reference counting. The page is tall so the scrollbar is visible.</p>
+
+        <section>
+            <h2>Lock / unlock</h2>
+            <p class="hint">
+                Each Lock adds a reference. Scroll is only restored when all references are released. Try locking twice,
+                then unlocking step by step.
+            </p>
+            <div class="btn-row">
+                <button id="lock-btn">Lock scroll</button>
+                <button id="unlock-btn">Unlock scroll</button>
+                <button id="set-overflow-auto">Set overflow to "auto" first</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Locks:</span> <span class="value" id="lock-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">body.overflow:</span> <span class="value" id="overflow-value"></span
+                ></span>
+                <span class="status"
+                    ><span class="label">body.paddingRight:</span> <span class="value" id="padding-value"></span
+                ></span>
+            </div>
+        </section>
+
+        <script type="module">
+            import { lockScroll } from '../../src/index.ts'
+
+            const cleanups = []
+            const lockCount = document.getElementById('lock-count')
+            const overflowValue = document.getElementById('overflow-value')
+            const paddingValue = document.getElementById('padding-value')
+
+            function updateDisplay() {
+                lockCount.textContent = String(cleanups.length)
+                overflowValue.textContent = document.body.style.overflow
+                paddingValue.textContent = document.body.style.paddingRight
+            }
+
+            updateDisplay()
+
+            document.getElementById('lock-btn').addEventListener('click', () => {
+                cleanups.push(lockScroll())
+                updateDisplay()
+            })
+
+            document.getElementById('unlock-btn').addEventListener('click', () => {
+                const fn = cleanups.pop()
+                fn?.()
+                updateDisplay()
+            })
+
+            document.getElementById('set-overflow-auto').addEventListener('click', () => {
+                document.body.style.overflow = 'auto'
+                updateDisplay()
+            })
+        </script>
+    </body>
+</html>

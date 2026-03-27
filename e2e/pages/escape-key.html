@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Escape Key</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Escape Key</h1>
+        <p class="page-desc">Register an Escape key handler with optional preventDefault and stopPropagation.</p>
+
+        <section>
+            <h2>Register a handler</h2>
+            <p class="hint">
+                Click a register button, then press <kbd>Escape</kbd> on your keyboard. The counter increments each
+                time. Other keys are ignored.
+            </p>
+            <div class="btn-row">
+                <button id="register-btn">Register handler</button>
+                <button id="register-prevent-btn">Register (preventDefault)</button>
+                <button id="register-stop-btn">Register (stopPropagation)</button>
+                <button id="unregister-btn">Unregister</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Escape count:</span> <span class="value" id="escape-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Propagation:</span> <span class="value" id="propagation-log">none</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import { onEscapeKey } from '../../src/index.ts'
+
+            let count = 0
+            let cleanup = null
+            const countEl = document.getElementById('escape-count')
+            const propagationLog = document.getElementById('propagation-log')
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    propagationLog.textContent = 'propagated'
+                }
+            })
+
+            document.getElementById('register-btn').addEventListener('click', () => {
+                cleanup?.()
+                count = 0
+                countEl.textContent = '0'
+                cleanup = onEscapeKey(() => {
+                    count++
+                    countEl.textContent = String(count)
+                })
+            })
+
+            document.getElementById('register-prevent-btn').addEventListener('click', () => {
+                cleanup?.()
+                count = 0
+                countEl.textContent = '0'
+                cleanup = onEscapeKey(
+                    () => {
+                        count++
+                        countEl.textContent = String(count)
+                    },
+                    { preventDefault: true },
+                )
+            })
+
+            document.getElementById('register-stop-btn').addEventListener('click', () => {
+                cleanup?.()
+                count = 0
+                countEl.textContent = '0'
+                propagationLog.textContent = 'none'
+                cleanup = onEscapeKey(
+                    () => {
+                        count++
+                        countEl.textContent = String(count)
+                    },
+                    { stopPropagation: true },
+                )
+            })
+
+            document.getElementById('unregister-btn').addEventListener('click', () => {
+                cleanup?.()
+                cleanup = null
+            })
+        </script>
+    </body>
+</html>

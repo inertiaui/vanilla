@@ -1,6 +1,6 @@
 # Inertia UI Vanilla
 
-A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
+A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu navigation, click outside detection, floating element positioning, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
@@ -20,6 +20,9 @@ npm install @inertiaui/vanilla
 - [Scroll Locking](#scroll-locking)
 - [Focus Management](#focus-management)
 - [Keyboard Events](#keyboard-events)
+- [Click Outside](#click-outside)
+- [Menu Navigation](#menu-navigation)
+- [Positioning](#positioning)
 - [Accessibility](#accessibility)
 - [Animation](#animation)
 - [Helpers](#helpers)
@@ -181,6 +184,283 @@ onUnmounted(() => cleanup())
 useEffect(() => {
     return onEscapeKey(closeDialog)
 }, [])
+```
+
+## Click Outside
+
+The `onClickOutside` function detects clicks outside one or more elements and calls a callback. Useful for closing dropdowns, popovers, and modals when the user clicks elsewhere.
+
+### Basic Usage
+
+```typescript
+import { onClickOutside } from '@inertiaui/vanilla'
+
+const cleanup = onClickOutside(dropdownElement, (event) => {
+    closeDropdown()
+})
+
+// Later, remove the listener
+cleanup()
+```
+
+### Multiple Elements
+
+Pass an array of elements to ignore clicks inside any of them:
+
+```typescript
+const cleanup = onClickOutside([triggerButton, dropdownPanel], () => {
+    closeDropdown()
+})
+```
+
+### Portal Support
+
+Clicks inside elements with the `data-inertiaui-portal` attribute (or their descendants) are automatically ignored. This prevents portalled content like dropdown menus from being considered "outside":
+
+```html
+<div data-inertiaui-portal>
+    <!-- Clicks here won't trigger the callback -->
+</div>
+```
+
+### Same-Tick Protection
+
+The listener registration is deferred by one tick, so the click that triggered the element to open won't immediately close it:
+
+```typescript
+openButton.addEventListener('click', () => {
+    dropdown.hidden = false
+    // The click on openButton won't trigger the outside handler
+    onClickOutside(dropdown, () => { dropdown.hidden = true })
+})
+```
+
+## Menu Navigation
+
+The `createMenuNavigation` function adds keyboard navigation to menu containers, implementing the [WAI-ARIA Menu Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/menu/). It supports arrow key navigation, roving tabindex, type-ahead search, and item activation.
+
+### Basic Usage
+
+```typescript
+import { createMenuNavigation } from '@inertiaui/vanilla'
+
+const cleanup = createMenuNavigation(menuElement)
+
+// Later, remove navigation
+cleanup()
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `itemSelector` | `string` | `'[role="menuitem"]:not([disabled]):not([aria-disabled="true"])'` | CSS selector for menu items |
+| `orientation` | `'vertical' \| 'horizontal'` | `'vertical'` | Arrow key direction |
+| `loop` | `boolean` | `true` | Wrap focus from last to first item |
+| `typeAhead` | `boolean` | `true` | Enable type-ahead character search |
+| `onActivate` | `(item: HTMLElement) => void` | `undefined` | Called when an item is activated via Enter or Space |
+
+### Keyboard Support
+
+| Key | Action |
+|-----|--------|
+| `ArrowDown` / `ArrowRight` | Focus next item (depending on orientation) |
+| `ArrowUp` / `ArrowLeft` | Focus previous item (depending on orientation) |
+| `Home` | Focus first item |
+| `End` | Focus last item |
+| `Enter` / `Space` | Activate (click) the focused item |
+| Any character | Type-ahead: focus the first item whose text starts with the typed characters |
+
+### Roving Tabindex
+
+The focused item receives `tabindex="0"` while all other items receive `tabindex="-1"`. This allows the menu to participate in the page's tab order with a single tab stop:
+
+```typescript
+const cleanup = createMenuNavigation(menuElement)
+
+// First item has tabindex="0", rest have tabindex="-1"
+// Arrow keys move focus and update tabindex accordingly
+```
+
+### Horizontal Menus
+
+For horizontal menus like toolbars, use `orientation: 'horizontal'`:
+
+```typescript
+const cleanup = createMenuNavigation(toolbar, {
+    orientation: 'horizontal',
+})
+// ArrowRight/ArrowLeft navigate instead of ArrowDown/ArrowUp
+```
+
+### Custom Item Selector
+
+Use a custom selector for non-standard menu structures:
+
+```typescript
+const cleanup = createMenuNavigation(container, {
+    itemSelector: '.menu-item:not(.disabled)',
+})
+```
+
+### Full Example
+
+```typescript
+import { createMenuNavigation, onClickOutside, onEscapeKey } from '@inertiaui/vanilla'
+
+function openMenu(menuElement: HTMLElement) {
+    menuElement.hidden = false
+
+    const cleanups = [
+        createMenuNavigation(menuElement, {
+            onActivate: (item) => {
+                handleMenuAction(item.dataset.action!)
+                closeMenu()
+            },
+        }),
+        onClickOutside(menuElement, closeMenu),
+        onEscapeKey(closeMenu),
+    ]
+
+    function closeMenu() {
+        cleanups.forEach((fn) => fn())
+        menuElement.hidden = true
+    }
+}
+```
+
+## Positioning
+
+Utilities for positioning floating elements (dropdowns, tooltips, popovers) relative to a reference element. Uses [CSS Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning) when supported, with an automatic JavaScript fallback.
+
+### supportsAnchorPositioning
+
+Check if the browser supports CSS Anchor Positioning:
+
+```typescript
+import { supportsAnchorPositioning } from '@inertiaui/vanilla'
+
+if (supportsAnchorPositioning()) {
+    // Browser handles positioning via CSS
+} else {
+    // JavaScript fallback is used
+}
+```
+
+The result is cached after the first call.
+
+### computePosition
+
+Position a floating element relative to a reference element:
+
+```typescript
+import { computePosition } from '@inertiaui/vanilla'
+
+const result = computePosition(referenceElement, floatingElement)
+// { x: 100, y: 140, placement: 'bottom-start' }
+```
+
+The function applies positioning styles to the floating element automatically (`position: fixed` with `top` and `left` values).
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `placement` | `Placement` | `'bottom-start'` | Where to position the floating element |
+| `offset` | `number` | `0` | Distance in pixels between reference and floating element |
+| `flip` | `boolean` | `true` | Flip to opposite side when overflowing viewport |
+
+#### Placements
+
+Twelve placement options are available, combining a side with an optional alignment:
+
+| Side | Center | Start | End |
+|------|--------|-------|-----|
+| `top` | `top` | `top-start` | `top-end` |
+| `bottom` | `bottom` | `bottom-start` | `bottom-end` |
+| `left` | `left` | `left-start` | `left-end` |
+| `right` | `right` | `right-start` | `right-end` |
+
+The `start` and `end` alignments are RTL-aware for `top` and `bottom` placements.
+
+#### Flip Behavior
+
+When the floating element would overflow the viewport, it automatically flips to the opposite side:
+
+```typescript
+// If there's no room below, flips to top
+const result = computePosition(reference, floating, {
+    placement: 'bottom-start',
+})
+// result.placement may be 'top-start' if it flipped
+```
+
+Disable flipping to keep the element on the specified side:
+
+```typescript
+const result = computePosition(reference, floating, {
+    placement: 'bottom-start',
+    flip: false,
+})
+```
+
+#### Viewport Clamping
+
+The floating element is always clamped to stay within the viewport with a 4px margin, even after flipping.
+
+### autoUpdate
+
+Automatically reposition the floating element when the layout changes:
+
+```typescript
+import { computePosition, autoUpdate } from '@inertiaui/vanilla'
+
+const cleanup = autoUpdate(referenceElement, floatingElement, () => {
+    computePosition(referenceElement, floatingElement, {
+        placement: 'bottom-start',
+        offset: 8,
+    })
+})
+
+// Later, stop updating
+cleanup()
+```
+
+`autoUpdate` listens for:
+
+- Window `resize` events
+- Window `scroll` events (including nested scrollable containers)
+- Size changes on both the reference and floating elements (via `ResizeObserver`)
+
+Updates are batched using `requestAnimationFrame` to avoid layout thrashing.
+
+### CSS Anchor Positioning
+
+When the browser supports CSS Anchor Positioning, `computePosition` uses native CSS for positioning. This provides better performance and handles edge cases like scrolling and resizing without JavaScript recalculation. The `autoUpdate` cleanup function automatically removes CSS anchor styles when called.
+
+### Full Example
+
+```typescript
+import { computePosition, autoUpdate } from '@inertiaui/vanilla'
+
+function setupTooltip(trigger: HTMLElement, tooltip: HTMLElement) {
+    tooltip.style.display = 'block'
+
+    const cleanup = autoUpdate(trigger, tooltip, () => {
+        computePosition(trigger, tooltip, {
+            placement: 'top',
+            offset: 8,
+        })
+    })
+
+    // Initial position
+    computePosition(trigger, tooltip, {
+        placement: 'top',
+        offset: 8,
+    })
+
+    return cleanup
+}
 ```
 
 ## Accessibility
@@ -641,6 +921,51 @@ Useful for determining active navigation states or comparing the current route w
 const isActive = sameUrlPath(window.location.href, linkHref)
 ```
 
+## Development
+
+### Running the dev server
+
+Start Vite to browse the interactive test pages:
+
+```bash
+npx vite --port 3333
+```
+
+Then open `http://localhost:3333` for an overview linking to all test pages.
+
+### Running E2E tests
+
+The test suite uses Playwright with Chromium. It automatically starts a Vite dev server:
+
+```bash
+npm run test:e2e
+```
+
+Run a single spec:
+
+```bash
+npx playwright test e2e/menu.spec.ts
+```
+
+Run tests matching a name:
+
+```bash
+npx playwright test -g "ArrowDown"
+```
+
+### Test structure
+
+Each feature has a spec file and a matching HTML page:
+
+```
+e2e/click-outside.spec.ts  →  e2e/pages/click-outside.html
+e2e/menu.spec.ts           →  e2e/pages/menu.html
+e2e/focus-trap.spec.ts     →  e2e/pages/focus-trap.html
+...
+```
+
+The mapping is handled by a custom fixture in `e2e/test.ts`. HTML pages import directly from the TypeScript source via Vite.
+
 ## TypeScript
 
 This library is written in TypeScript and exports the following types:
@@ -652,6 +977,10 @@ import type {
     EscapeKeyOptions,
     AnimateOptions,
     EasingName,
+    MenuNavigationOptions,
+    Placement,
+    PositionOptions,
+    PositionResult,
 } from '@inertiaui/vanilla'
 ```
 

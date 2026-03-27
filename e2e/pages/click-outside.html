@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Click Outside</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Click Outside</h1>
+        <p class="page-desc">Detect clicks outside one or more elements. Supports portals and same-tick protection.</p>
+
+        <section>
+            <h2>Basic dropdown</h2>
+            <p class="hint">
+                Click the button to open. Click anywhere outside to close. Clicking inside the dropdown keeps it open.
+            </p>
+            <div class="btn-row">
+                <button id="toggle-dropdown">Toggle Dropdown</button>
+            </div>
+            <div id="dropdown" class="panel hidden">
+                <p>Dropdown content</p>
+                <button id="dropdown-action">Action (inside)</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">State:</span> <span class="value" id="click-outside-status">closed</span></span
+                >
+            </div>
+        </section>
+
+        <section>
+            <h2>Portal support</h2>
+            <p class="hint">
+                Open the dropdown above, then click these portal buttons. The dropdown stays open because clicks inside
+                <code>data-inertiaui-portal</code> elements are ignored.
+            </p>
+            <div id="portal" data-inertiaui-portal class="panel" style="border-color: #c084fc">
+                <button id="portal-btn">Portal button</button>
+                <div><button id="portal-child">Nested portal child</button></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Multiple elements</h2>
+            <p class="hint">
+                Both target panels are passed as an array. Clicking inside either one keeps the panel open. Clicking
+                outside both closes them.
+            </p>
+            <div class="btn-row">
+                <button id="multi-toggle">Toggle Multi</button>
+            </div>
+            <div id="multi-target-1" class="panel hidden">Target 1</div>
+            <div id="multi-target-2" class="panel hidden">Target 2</div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">State:</span> <span class="value" id="multi-status">closed</span></span
+                >
+            </div>
+        </section>
+
+        <section>
+            <h2>Same-tick protection</h2>
+            <p class="hint">
+                The listener is deferred by one tick, so the click that opens the element won't immediately close it.
+                This button opens a dropdown and synchronously dispatches a pointerdown outside.
+            </p>
+            <div class="btn-row">
+                <button id="same-tick-btn">Open + immediate outside click</button>
+            </div>
+            <div id="same-tick-dropdown" class="panel hidden">Same tick dropdown (should stay open)</div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">State:</span> <span class="value" id="same-tick-status">closed</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import { onClickOutside } from '../../src/index.ts'
+
+            // Basic dropdown
+            const toggleBtn = document.getElementById('toggle-dropdown')
+            const dropdown = document.getElementById('dropdown')
+            const clickStatus = document.getElementById('click-outside-status')
+            let dropdownCleanup = null
+
+            toggleBtn.addEventListener('click', () => {
+                if (dropdown.classList.contains('hidden')) {
+                    dropdown.classList.remove('hidden')
+                    clickStatus.textContent = 'open'
+                    dropdownCleanup = onClickOutside([toggleBtn, dropdown], () => {
+                        dropdown.classList.add('hidden')
+                        clickStatus.textContent = 'closed'
+                        dropdownCleanup?.()
+                        dropdownCleanup = null
+                    })
+                } else {
+                    dropdown.classList.add('hidden')
+                    clickStatus.textContent = 'closed'
+                    dropdownCleanup?.()
+                    dropdownCleanup = null
+                }
+            })
+
+            // Multi-target
+            const multiToggle = document.getElementById('multi-toggle')
+            const multiTarget1 = document.getElementById('multi-target-1')
+            const multiTarget2 = document.getElementById('multi-target-2')
+            const multiStatus = document.getElementById('multi-status')
+            let multiCleanup = null
+
+            multiToggle.addEventListener('click', () => {
+                multiTarget1.classList.remove('hidden')
+                multiTarget2.classList.remove('hidden')
+                multiStatus.textContent = 'open'
+                multiCleanup?.()
+                multiCleanup = onClickOutside([multiToggle, multiTarget1, multiTarget2], () => {
+                    multiTarget1.classList.add('hidden')
+                    multiTarget2.classList.add('hidden')
+                    multiStatus.textContent = 'closed'
+                    multiCleanup?.()
+                    multiCleanup = null
+                })
+            })
+
+            // Same-tick test
+            const sameTick = document.getElementById('same-tick-dropdown')
+            const sameTickStatus = document.getElementById('same-tick-status')
+            window.openSameTickDropdown = () => {
+                sameTick.classList.remove('hidden')
+                sameTickStatus.textContent = 'open'
+                const cleanup = onClickOutside(sameTick, () => {
+                    sameTick.classList.add('hidden')
+                    sameTickStatus.textContent = 'closed'
+                    cleanup?.()
+                })
+                document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+            }
+
+            document.getElementById('same-tick-btn').addEventListener('click', () => {
+                window.openSameTickDropdown()
+            })
+        </script>
+    </body>
+</html>
