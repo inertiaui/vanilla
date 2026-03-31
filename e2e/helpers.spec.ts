@@ -103,6 +103,20 @@ test.describe('isStandardDomEvent', () => {
     })
 })
 
+test.describe('onceChildrenRendered', () => {
+    test('calls callback immediately when children already exist', async ({ page }) => {
+        await expect(page.locator('#once-has-children')).toHaveText('called')
+    })
+
+    test('calls callback when children are added later', async ({ page }) => {
+        await expect(page.locator('#once-no-children')).toHaveText('called')
+    })
+
+    test('disconnects observer after first callback', async ({ page }) => {
+        await expect(page.locator('#once-disconnect')).toHaveText('1')
+    })
+})
+
 test.describe('sameUrlPath', () => {
     test('matches identical paths', async ({ page }) => {
         await expect(page.locator('#sameUrl-same')).toHaveText('true')
