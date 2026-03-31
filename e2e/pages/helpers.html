@@ -156,6 +156,34 @@
         </section>
 
         <section>
+            <h2>onceChildrenRendered</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Element already has children</td>
+                    <td id="once-has-children"></td>
+                </tr>
+                <tr>
+                    <td>Children added later</td>
+                    <td id="once-no-children"></td>
+                </tr>
+                <tr>
+                    <td>Callback count after multiple child additions</td>
+                    <td id="once-disconnect"></td>
+                </tr>
+            </table>
+            <!-- Element that already has a child -->
+            <div id="once-parent-with-children"><span>existing</span></div>
+            <!-- Element with no children yet -->
+            <div id="once-parent-empty"></div>
+            <!-- Element for disconnect test -->
+            <div id="once-parent-disconnect"></div>
+        </section>
+
+        <section>
             <h2>sameUrlPath</h2>
             <table class="results-table">
                 <tr>
@@ -189,6 +217,7 @@
                 rejectNullValues,
                 kebabCase,
                 isStandardDomEvent,
+                onceChildrenRendered,
                 sameUrlPath,
             } from '../../src/index.ts'
 
@@ -221,6 +250,39 @@
             set('isEvent-click', String(isStandardDomEvent('onClick')))
             set('isEvent-custom', String(isStandardDomEvent('onCustomEvent')))
             set('isEvent-case', String(isStandardDomEvent('ONCLICK')))
+
+            // onceChildrenRendered — already has children
+            const parentWithChildren = document.getElementById('once-parent-with-children')
+            onceChildrenRendered(parentWithChildren, () => {
+                set('once-has-children', 'called')
+            })
+
+            // onceChildrenRendered — children added later
+            const parentEmpty = document.getElementById('once-parent-empty')
+            onceChildrenRendered(parentEmpty, () => {
+                set('once-no-children', 'called')
+            })
+            setTimeout(() => {
+                parentEmpty.appendChild(document.createElement('span'))
+            }, 50)
+
+            // onceChildrenRendered — observer disconnects after first callback
+            const parentDisconnect = document.getElementById('once-parent-disconnect')
+            let disconnectCount = 0
+            onceChildrenRendered(parentDisconnect, () => {
+                disconnectCount++
+                set('once-disconnect', String(disconnectCount))
+            })
+            setTimeout(() => {
+                parentDisconnect.appendChild(document.createElement('span'))
+                setTimeout(() => {
+                    parentDisconnect.appendChild(document.createElement('span'))
+                    // Give time to confirm count stays at 1
+                    setTimeout(() => {
+                        set('once-disconnect', String(disconnectCount))
+                    }, 50)
+                }, 50)
+            }, 50)
 
             set('sameUrl-same', String(sameUrlPath('/users/1', '/users/1')))
             set('sameUrl-query', String(sameUrlPath('/users/1', '/users/1?tab=posts')))

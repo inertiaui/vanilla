@@ -102,6 +102,22 @@ export function isStandardDomEvent(eventName: string): boolean {
     return standardPatterns.some((pattern) => pattern.test(lowerEventName))
 }
 
+export function onceChildrenRendered(element: Element, callback: () => void): void {
+    if (element.children.length > 0) {
+        callback()
+        return
+    }
+
+    const observer = new MutationObserver(() => {
+        if (element.children.length > 0) {
+            observer.disconnect()
+            callback()
+        }
+    })
+
+    observer.observe(element, { childList: true })
+}
+
 export function sameUrlPath(url1: string | URL | undefined | null, url2: string | URL | undefined | null): boolean {
     if (!url1 || !url2) {
         return false
