@@ -21,3 +21,9 @@ export type { MenuNavigationOptions } from './menu'
 
 export { supportsAnchorPositioning, computePosition, autoUpdate } from './position'
 export type { Placement, PositionOptions, PositionResult } from './position'
+
+export { blank } from './blank'
+export { debounce, detectFramerate } from './debounce'
+export { prefersDarkMode } from './darkMode'
+export type { DarkModeStrategy } from './darkMode'
+export { isRtl, onRtlChange } from './rtl'

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>rtl</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>RTL detection</h1>
+        <p class="page-desc">Direction detection and change observation.</p>
+
+        <section>
+            <h2>isRtl / onRtlChange</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>isRtl() in LTR document</td>
+                    <td id="rtl-initial"></td>
+                </tr>
+                <tr>
+                    <td>isRtl() after switching to RTL</td>
+                    <td id="rtl-after-switch"></td>
+                </tr>
+                <tr>
+                    <td>onRtlChange callback value</td>
+                    <td id="rtl-callback-value"></td>
+                </tr>
+                <tr>
+                    <td>onRtlChange stops after cleanup</td>
+                    <td id="rtl-cleanup"></td>
+                </tr>
+            </table>
+        </section>
+
+        <button id="switch-to-rtl">Switch to RTL</button>
+        <button id="switch-to-ltr">Switch to LTR</button>
+        <button id="cleanup-and-switch">Cleanup then switch</button>
+
+        <script type="module">
+            import { isRtl, onRtlChange } from '../../src/index.ts'
+
+            const set = (id, value) => (document.getElementById(id).textContent = String(value))
+
+            // Initial state (LTR)
+            document.documentElement.dir = 'ltr'
+            set('rtl-initial', isRtl())
+
+            // Set up observer
+            let callbackValue = null
+            const cleanup = onRtlChange((rtl) => {
+                callbackValue = rtl
+                set('rtl-callback-value', callbackValue)
+            })
+
+            // Switch to RTL button
+            document.getElementById('switch-to-rtl').addEventListener('click', () => {
+                document.documentElement.dir = 'rtl'
+                // isRtl() should reflect immediately
+                set('rtl-after-switch', isRtl())
+            })
+
+            // Switch to LTR button
+            document.getElementById('switch-to-ltr').addEventListener('click', () => {
+                document.documentElement.dir = 'ltr'
+            })
+
+            // Cleanup then switch — callback should NOT fire
+            let cleanupCallCount = 0
+            const cleanup2 = onRtlChange(() => {
+                cleanupCallCount++
+            })
+
+            document.getElementById('cleanup-and-switch').addEventListener('click', () => {
+                cleanup2()
+                document.documentElement.dir = document.documentElement.dir === 'rtl' ? 'ltr' : 'rtl'
+                // Wait for potential MutationObserver callback
+                setTimeout(() => {
+                    set('rtl-cleanup', cleanupCallCount)
+                }, 50)
+            })
+        </script>
+    </body>
+</html>

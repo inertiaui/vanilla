@@ -5,3 +5,4 @@ dist
 *.tsbuildinfo
 /docs/.vitepress/cache
 test-results/.last-run.json
+/test-results
