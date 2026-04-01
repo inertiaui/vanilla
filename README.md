@@ -25,8 +25,13 @@ npm install @inertiaui/vanilla
 - [Positioning](#positioning)
 - [Accessibility](#accessibility)
 - [Animation](#animation)
+- [Dark Mode Detection](#dark-mode-detection)
+- [RTL Support](#rtl-support)
+- [Debounce](#debounce)
 - [Helpers](#helpers)
   - [generateId](#generateid)
+  - [blank](#blank)
+  - [onceChildrenRendered](#oncechildrenrendered)
   - [Object Filtering](#object-filtering)
   - [String Utilities](#string-utilities)
   - [URL Utilities](#url-utilities)
@@ -653,6 +658,96 @@ function forceHideModal(modal: HTMLElement) {
 }
 ```
 
+## Dark Mode Detection
+
+The `prefersDarkMode` function detects whether the user prefers dark mode, with support for multiple detection strategies.
+
+### Basic Usage
+
+```typescript
+import { prefersDarkMode } from '@inertiaui/vanilla'
+
+const isDark = prefersDarkMode()
+```
+
+### Strategies
+
+| Strategy | Behavior |
+|----------|----------|
+| `'auto'` (default) | Checks `<html class="dark">` first, then `prefers-color-scheme: dark` media query |
+| `'class'` / `'selector'` | Checks `<html class="dark">` |
+| `'media'` | Checks `prefers-color-scheme: dark` media query |
+| Custom function | Called directly for full control |
+
+```typescript
+// Class-based detection (e.g., Tailwind dark mode)
+prefersDarkMode('class')
+
+// Media query only
+prefersDarkMode('media')
+
+// Custom logic
+prefersDarkMode(() => document.body.dataset.theme === 'dark')
+```
+
+## RTL Support
+
+Utilities for detecting and observing right-to-left document direction.
+
+### isRtl
+
+Check whether the document is currently in RTL direction:
+
+```typescript
+import { isRtl } from '@inertiaui/vanilla'
+
+if (isRtl()) {
+    // Document is right-to-left
+}
+```
+
+### onRtlChange
+
+Observe changes to the document's `dir` attribute and invoke a callback whenever it changes. Returns a cleanup function.
+
+```typescript
+import { onRtlChange } from '@inertiaui/vanilla'
+
+const cleanup = onRtlChange((rtl) => {
+    console.log('RTL changed:', rtl)
+})
+
+// Later, stop observing
+cleanup()
+```
+
+## Debounce
+
+### debounce
+
+Debounce a function using `requestAnimationFrame`. Ensures the function runs at most once per animation frame.
+
+```typescript
+import { debounce } from '@inertiaui/vanilla'
+
+const handleScroll = debounce(() => {
+    updatePosition()
+})
+
+window.addEventListener('scroll', handleScroll)
+```
+
+### detectFramerate
+
+Detect the browser's current framerate. Returns a Promise that resolves with the detected FPS (capped to the 30–240 range). Falls back to 60 if `requestAnimationFrame` is unavailable or detection times out.
+
+```typescript
+import { detectFramerate } from '@inertiaui/vanilla'
+
+const fps = await detectFramerate()
+console.log(`Running at ${fps} FPS`)
+```
+
 ## Helpers
 
 ### generateId
@@ -704,6 +799,36 @@ dialog.setAttribute('aria-labelledby', titleId)
 dialog.setAttribute('aria-describedby', descId)
 title.id = titleId
 description.id = descId
+```
+
+### blank
+
+A port of Laravel's `blank` function. Returns `true` if the value is "empty" — `null`, `undefined`, empty string (or whitespace-only), empty array, or empty object.
+
+```typescript
+import { blank } from '@inertiaui/vanilla'
+
+blank(null)        // true
+blank(undefined)   // true
+blank('')          // true
+blank('  ')        // true
+blank([])          // true
+blank('hello')     // false
+blank(0)           // false
+blank(false)       // false
+```
+
+### onceChildrenRendered
+
+Invokes a callback once the given element has child elements. If the element already has children, the callback fires immediately. Otherwise, it uses a `MutationObserver` to wait for children to appear.
+
+```typescript
+import { onceChildrenRendered } from '@inertiaui/vanilla'
+
+onceChildrenRendered(containerElement, () => {
+    // Children are now present in the DOM
+    initializeContent()
+})
 ```
 
 ### Object Filtering
@@ -981,6 +1106,7 @@ import type {
     Placement,
     PositionOptions,
     PositionResult,
+    DarkModeStrategy,
 } from '@inertiaui/vanilla'
 ```
 
