@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Color</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Color</h1>
+        <p class="page-desc">Hex/HSL color conversion utilities. Results are computed on page load.</p>
+
+        <section>
+            <h2>hexToHsl</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Input</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('#ff0000')</code></td>
+                    <td id="hex-red"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('#00ff00')</code></td>
+                    <td id="hex-green"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('#0000ff')</code></td>
+                    <td id="hex-blue"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('#ffffff')</code></td>
+                    <td id="hex-white"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('#000000')</code></td>
+                    <td id="hex-black"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('ff8800')</code> (no #)</td>
+                    <td id="hex-no-hash"></td>
+                </tr>
+                <tr>
+                    <td><code>hexToHsl('invalid')</code></td>
+                    <td id="hex-invalid"></td>
+                </tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>hslToHex</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Input</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><code>hslToHex(0, 100, 50)</code></td>
+                    <td id="hsl-red"></td>
+                </tr>
+                <tr>
+                    <td><code>hslToHex(120, 100, 50)</code></td>
+                    <td id="hsl-green"></td>
+                </tr>
+                <tr>
+                    <td><code>hslToHex(240, 100, 50)</code></td>
+                    <td id="hsl-blue"></td>
+                </tr>
+                <tr>
+                    <td><code>hslToHex(0, 0, 100)</code></td>
+                    <td id="hsl-white"></td>
+                </tr>
+                <tr>
+                    <td><code>hslToHex(0, 0, 0)</code></td>
+                    <td id="hsl-black"></td>
+                </tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>Roundtrip</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Input</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>hexToHsl → hslToHex for #ff8800</td>
+                    <td id="roundtrip-orange"></td>
+                </tr>
+                <tr>
+                    <td>hexToHsl → hslToHex for #336699</td>
+                    <td id="roundtrip-steel"></td>
+                </tr>
+            </table>
+        </section>
+
+        <script type="module">
+            import { hexToHsl, hslToHex } from '../../src/index.ts'
+
+            const set = (id, val) => (document.getElementById(id).textContent = val)
+            const fmtHsl = ({ h, s, l }) => `${h},${s},${l}`
+
+            // hexToHsl
+            set('hex-red', fmtHsl(hexToHsl('#ff0000')))
+            set('hex-green', fmtHsl(hexToHsl('#00ff00')))
+            set('hex-blue', fmtHsl(hexToHsl('#0000ff')))
+            set('hex-white', fmtHsl(hexToHsl('#ffffff')))
+            set('hex-black', fmtHsl(hexToHsl('#000000')))
+            set('hex-no-hash', fmtHsl(hexToHsl('ff8800')))
+            set('hex-invalid', fmtHsl(hexToHsl('invalid')))
+
+            // hslToHex
+            set('hsl-red', hslToHex(0, 100, 50))
+            set('hsl-green', hslToHex(120, 100, 50))
+            set('hsl-blue', hslToHex(240, 100, 50))
+            set('hsl-white', hslToHex(0, 0, 100))
+            set('hsl-black', hslToHex(0, 0, 0))
+
+            // Roundtrip
+            const rt = (hex) => {
+                const { h, s, l } = hexToHsl(hex)
+                return hslToHex(h, s, l)
+            }
+            set('roundtrip-orange', rt('#ff8800'))
+            set('roundtrip-steel', rt('#336699'))
+        </script>
+    </body>
+</html>

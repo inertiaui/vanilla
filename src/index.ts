@@ -21,3 +21,6 @@ export type { MenuNavigationOptions } from './menu'
 
 export { supportsAnchorPositioning, computePosition, autoUpdate } from './position'
 export type { Placement, PositionOptions, PositionResult } from './position'
+
+export { hexToHsl, hslToHex } from './color'
+export type { HslColor } from './color'
