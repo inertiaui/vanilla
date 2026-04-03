@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>blank</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>blank</h1>
+        <p class="page-desc">Laravel's blank() port. Results computed on page load.</p>
+
+        <section>
+            <h2>blank()</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Input</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><code>null</code></td>
+                    <td id="blank-null"></td>
+                </tr>
+                <tr>
+                    <td><code>undefined</code></td>
+                    <td id="blank-undefined"></td>
+                </tr>
+                <tr>
+                    <td><code>''</code></td>
+                    <td id="blank-empty-string"></td>
+                </tr>
+                <tr>
+                    <td><code>' '</code> (whitespace)</td>
+                    <td id="blank-whitespace"></td>
+                </tr>
+                <tr>
+                    <td><code>'hello'</code></td>
+                    <td id="blank-string"></td>
+                </tr>
+                <tr>
+                    <td><code>0</code></td>
+                    <td id="blank-zero"></td>
+                </tr>
+                <tr>
+                    <td><code>false</code></td>
+                    <td id="blank-false"></td>
+                </tr>
+                <tr>
+                    <td><code>[]</code></td>
+                    <td id="blank-empty-array"></td>
+                </tr>
+                <tr>
+                    <td><code>[1, 2]</code></td>
+                    <td id="blank-array"></td>
+                </tr>
+                <tr>
+                    <td><code>{}</code></td>
+                    <td id="blank-empty-object"></td>
+                </tr>
+                <tr>
+                    <td><code>{ a: 1 }</code></td>
+                    <td id="blank-object"></td>
+                </tr>
+            </table>
+        </section>
+
+        <script type="module">
+            import { blank } from '../../src/index.ts'
+
+            const set = (id, value) => (document.getElementById(id).textContent = String(value))
+
+            set('blank-null', blank(null))
+            set('blank-undefined', blank(undefined))
+            set('blank-empty-string', blank(''))
+            set('blank-whitespace', blank('  '))
+            set('blank-string', blank('hello'))
+            set('blank-zero', blank(0))
+            set('blank-false', blank(false))
+            set('blank-empty-array', blank([]))
+            set('blank-array', blank([1, 2]))
+            set('blank-empty-object', blank({}))
+            set('blank-object', blank({ a: 1 }))
+        </script>
+    </body>
+</html>

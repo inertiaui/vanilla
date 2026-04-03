@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>debounce</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>debounce &amp; detectFramerate</h1>
+        <p class="page-desc">RAF-based debounce and framerate detection.</p>
+
+        <section>
+            <h2>debounce</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Call count after 10 rapid calls</td>
+                    <td id="debounce-count"></td>
+                </tr>
+                <tr>
+                    <td>Receives correct arguments</td>
+                    <td id="debounce-args"></td>
+                </tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>detectFramerate</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>Detected FPS (30–240 range)</td>
+                    <td id="framerate-value"></td>
+                </tr>
+            </table>
+        </section>
+
+        <script type="module">
+            import { debounce, detectFramerate } from '../../src/index.ts'
+
+            const set = (id, value) => (document.getElementById(id).textContent = String(value))
+
+            // debounce: call 10 times rapidly, should only execute once per frame
+            let callCount = 0
+            const debounced = debounce(() => {
+                callCount++
+            })
+
+            for (let i = 0; i < 10; i++) {
+                debounced()
+            }
+
+            // Wait for the RAF to fire
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    set('debounce-count', callCount)
+                })
+            })
+
+            // debounce: check arguments are passed through
+            let receivedArgs = null
+            const debouncedWithArgs = debounce((...args) => {
+                receivedArgs = args
+            })
+
+            debouncedWithArgs('a', 'b', 'c')
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    set('debounce-args', JSON.stringify(receivedArgs))
+                })
+            })
+
+            // detectFramerate
+            detectFramerate().then((fps) => {
+                set('framerate-value', fps)
+            })
+        </script>
+    </body>
+</html>

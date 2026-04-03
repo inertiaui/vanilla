@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>dark-mode</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>prefersDarkMode</h1>
+        <p class="page-desc">Dark mode detection with configurable strategies.</p>
+
+        <section>
+            <h2>prefersDarkMode()</h2>
+            <table class="results-table">
+                <tr>
+                    <th>Strategy</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td><code>'class'</code> (no dark class)</td>
+                    <td id="dark-class-off"></td>
+                </tr>
+                <tr>
+                    <td><code>'class'</code> (with dark class)</td>
+                    <td id="dark-class-on"></td>
+                </tr>
+                <tr>
+                    <td><code>'media'</code></td>
+                    <td id="dark-media"></td>
+                </tr>
+                <tr>
+                    <td>Custom function returning true</td>
+                    <td id="dark-custom-true"></td>
+                </tr>
+                <tr>
+                    <td>Custom function returning false</td>
+                    <td id="dark-custom-false"></td>
+                </tr>
+                <tr>
+                    <td><code>'auto'</code> (no dark class, light media)</td>
+                    <td id="dark-auto"></td>
+                </tr>
+            </table>
+        </section>
+
+        <script type="module">
+            import { prefersDarkMode } from '../../src/index.ts'
+
+            const set = (id, value) => (document.getElementById(id).textContent = String(value))
+
+            // class strategy — no dark class
+            document.documentElement.classList.remove('dark')
+            set('dark-class-off', prefersDarkMode('class'))
+
+            // class strategy — with dark class
+            document.documentElement.classList.add('dark')
+            set('dark-class-on', prefersDarkMode('class'))
+            document.documentElement.classList.remove('dark')
+
+            // media strategy — depends on browser/OS setting
+            set('dark-media', prefersDarkMode('media'))
+
+            // custom function
+            set(
+                'dark-custom-true',
+                prefersDarkMode(() => true),
+            )
+            set(
+                'dark-custom-false',
+                prefersDarkMode(() => false),
+            )
+
+            // auto strategy — no dark class present
+            set('dark-auto', prefersDarkMode('auto'))
+        </script>
+    </body>
+</html>
