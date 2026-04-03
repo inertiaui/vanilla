@@ -27,3 +27,6 @@ export { debounce, detectFramerate } from './debounce'
 export { prefersDarkMode } from './darkMode'
 export type { DarkModeStrategy } from './darkMode'
 export { isRtl, onRtlChange } from './rtl'
+
+export { hexToHsl, hslToHex } from './color'
+export type { HslColor } from './color'
