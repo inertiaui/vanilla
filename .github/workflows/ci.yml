@@ -19,6 +19,7 @@ jobs:
 
             - run: vp dlx playwright install --with-deps chromium
 
-            - run: vp check
+            - run: vp fmt --check src/ e2e/
+            - run: vp lint src/
             - run: vp build
             - run: vp dlx playwright test
