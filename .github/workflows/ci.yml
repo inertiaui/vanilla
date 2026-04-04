@@ -11,13 +11,25 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - uses: voidzero-dev/setup-vp@v1
               with:
+                  node-version: 22
                   cache: true
 
-            - run: vp dlx playwright install --with-deps chromium
+            - name: Cache Playwright browsers
+              id: playwright-cache
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-${{ hashFiles('package-lock.json') }}
+
+            - if: steps.playwright-cache.outputs.cache-hit != 'true'
+              run: vp dlx playwright install --with-deps chromium
+
+            - if: steps.playwright-cache.outputs.cache-hit == 'true'
+              run: vp dlx playwright install-deps chromium
 
             - run: vp fmt --check src/ e2e/
             - run: vp lint src/
