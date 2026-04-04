@@ -1,27 +1,24 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+    ci:
+        runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+            - uses: voidzero-dev/setup-vp@v1
+              with:
+                  cache: true
 
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+            - run: vp dlx playwright install --with-deps chromium
 
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run build
-      - run: npm run test:e2e
+            - run: vp check
+            - run: vp build
+            - run: vp dlx playwright test

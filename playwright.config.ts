@@ -6,7 +6,7 @@ export default defineConfig({
         baseURL: 'http://localhost:3333',
     },
     webServer: {
-        command: 'npx vite --port 3333',
+        command: 'vp dev --port 3333',
         port: 3333,
         reuseExistingServer: !process.env.CI,
     },

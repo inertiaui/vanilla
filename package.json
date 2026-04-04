@@ -34,27 +34,30 @@
         "typescript"
     ],
     "scripts": {
-        "dev": "vite build --watch",
-        "build": "vite build",
-        "lint": "eslint src/",
-        "format": "prettier --write src/ e2e/",
-        "format:check": "prettier --check src/ e2e/",
-        "test": "vitest",
+        "dev": "vp build --watch",
+        "build": "vp build",
+        "lint": "vp lint src/",
+        "format": "vp fmt src/ e2e/",
+        "format:check": "vp fmt --check src/ e2e/",
+        "test": "vp test",
         "test:e2e": "playwright test",
-        "prepublishOnly": "npm run build"
+        "prepublishOnly": "npm run build",
+        "prepare": "vp config"
     },
     "devDependencies": {
         "@playwright/test": "^1.58.2",
-        "@typescript-eslint/eslint-plugin": "^8.0.0",
-        "@typescript-eslint/parser": "^8.0.0",
         "@vitest/coverage-v8": "^4.1.2",
         "@vitest/ui": "^4.1.2",
-        "eslint": "^9.0.0",
         "happy-dom": "^20.0.0",
-        "prettier": "^3.2.4",
         "typescript": "^5.7.0",
-        "vite": "^8.0.3",
+        "vite": "npm:@voidzero-dev/vite-plus-core@latest",
         "vite-plugin-dts": "^4.5.0",
-        "vitest": "^4.1.2"
+        "vite-plus": "latest",
+        "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+    },
+    "packageManager": "npm@11.12.1",
+    "overrides": {
+        "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+        "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
     }
 }
