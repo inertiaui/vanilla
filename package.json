@@ -46,18 +46,14 @@
     },
     "devDependencies": {
         "@playwright/test": "^1.58.2",
+        "@voidzero-dev/vite-plus-core": "^0.1.15",
         "@vitest/coverage-v8": "^4.1.2",
         "@vitest/ui": "^4.1.2",
         "happy-dom": "^20.0.0",
         "typescript": "^5.7.0",
-        "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+        "vite": "^8.0.0",
         "vite-plugin-dts": "^4.5.0",
-        "vite-plus": "latest",
-        "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
-    },
-    "packageManager": "npm@11.12.1",
-    "overrides": {
-        "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-        "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+        "vite-plus": "^0.1.15",
+        "vitest": "^4.1.0"
     }
 }
