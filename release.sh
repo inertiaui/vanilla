@@ -114,8 +114,8 @@ info "Running production build..."
 npm run build >/dev/null
 
 # Build must not have left source changes behind (e.g. formatter/lint auto-fix).
-# Only package.json should be modified at this point.
-UNEXPECTED_CHANGES=$(git status --porcelain | grep -vE "^.M package\.json$" || true)
+# Only package.json + package-lock.json (from npm version) should be modified at this point.
+UNEXPECTED_CHANGES=$(git status --porcelain | grep -vE "^.M (package\.json|package-lock\.json)$" || true)
 if [ -n "$UNEXPECTED_CHANGES" ]; then
     echo
     warn "Build modified unexpected files:"
@@ -126,7 +126,7 @@ fi
 success "Build clean"
 
 # ── commit ──────────────────────────────────────────────────────────────
-git add package.json
+git add package.json package-lock.json
 
 if git diff --cached --quiet; then
     warn "Nothing to commit (version unchanged)"
