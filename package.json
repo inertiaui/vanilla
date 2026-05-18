@@ -5,6 +5,7 @@
     "private": false,
     "license": "MIT",
     "type": "module",
+    "packageManager": "pnpm@11.1.2",
     "sideEffects": false,
     "files": [
         "dist"
@@ -41,7 +42,7 @@
         "format:check": "prettier --check src/ e2e/",
         "test": "vitest",
         "test:e2e": "playwright test",
-        "prepublishOnly": "npm run build"
+        "prepublishOnly": "pnpm run build"
     },
     "devDependencies": {
         "@playwright/test": "^1.58.2",

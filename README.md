@@ -1053,7 +1053,7 @@ const isActive = sameUrlPath(window.location.href, linkHref)
 Start Vite to browse the interactive test pages:
 
 ```bash
-npx vite --port 3333
+pnpm exec vite --port 3333
 ```
 
 Then open `http://localhost:3333` for an overview linking to all test pages.
@@ -1063,19 +1063,19 @@ Then open `http://localhost:3333` for an overview linking to all test pages.
 The test suite uses Playwright with Chromium. It automatically starts a Vite dev server:
 
 ```bash
-npm run test:e2e
+pnpm test:e2e
 ```
 
 Run a single spec:
 
 ```bash
-npx playwright test e2e/menu.spec.ts
+pnpm exec playwright test e2e/menu.spec.ts
 ```
 
 Run tests matching a name:
 
 ```bash
-npx playwright test -g "ArrowDown"
+pnpm exec playwright test -g "ArrowDown"
 ```
 
 ### Test structure
