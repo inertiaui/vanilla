@@ -71,6 +71,34 @@
         </section>
 
         <section>
+            <h2>Scrollable dialog</h2>
+            <p class="hint">
+                Long modal with a non-focusable label in the middle. Scrolling down and clicking the label should not
+                snap focus back to the first input (which would scroll the modal to the top).
+            </p>
+            <div class="btn-row">
+                <button id="open-scrollable-btn">Open scrollable dialog</button>
+            </div>
+
+            <div id="dialog-scrollable" class="dialog hidden" style="height: 200px; overflow-y: auto; padding: 0">
+                <div style="padding: 0.5rem">
+                    <input id="ds-first" type="text" placeholder="First input (top)" />
+                </div>
+                <div style="height: 80px"></div>
+                <p id="ds-label" style="margin: 0; padding: 0.25rem 0.5rem">
+                    Click me (plain paragraph, non-focusable target)
+                </p>
+                <div style="padding: 0.5rem">
+                    <input id="ds-mid-input" type="text" placeholder="Middle input" />
+                </div>
+                <div style="height: 600px"></div>
+                <div style="padding: 0.5rem">
+                    <button id="close-scrollable-btn">Close</button>
+                </div>
+            </div>
+        </section>
+
+        <section>
             <h2>Return focus with removed element</h2>
             <p class="hint">Tests that returnFocus checks isConnected before restoring focus.</p>
             <div class="btn-row">
@@ -128,6 +156,24 @@
             document.getElementById('close-nested-btn').addEventListener('click', closeNested)
 
             window.closeDialog = closeDialog
+
+            // Scrollable dialog wiring
+            const dialogScrollable = document.getElementById('dialog-scrollable')
+            let dialogScrollableCleanup = null
+
+            function openScrollable() {
+                dialogScrollable.classList.remove('hidden')
+                dialogScrollableCleanup = createFocusTrap(dialogScrollable)
+            }
+
+            function closeScrollable() {
+                dialogScrollableCleanup?.()
+                dialogScrollableCleanup = null
+                dialogScrollable.classList.add('hidden')
+            }
+
+            document.getElementById('open-scrollable-btn').addEventListener('click', openScrollable)
+            document.getElementById('close-scrollable-btn').addEventListener('click', closeScrollable)
 
             // Test: focusout with null relatedTarget (focus escaping to void)
             window.simulateFocusEscape = function () {

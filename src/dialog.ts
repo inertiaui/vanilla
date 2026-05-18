@@ -69,6 +69,25 @@ interface FocusTrapEntry {
 
 const focusTrapStack: FocusTrapEntry[] = []
 
+// Tracks the most recent pointerdown target so the focus trap can distinguish
+// "focus escaped the container" (recapture) from "user clicked a non-focusable
+// area inside the container" (leave focus alone — recapturing would scroll the
+// container back to the top).
+let lastPointerDownTarget: EventTarget | null = null
+
+function trackPointerDown(event: PointerEvent): void {
+    lastPointerDownTarget = event.target
+    // Clear after the current task. The synchronous focusout dispatched as the
+    // default action of this pointerdown still observes the target (captured
+    // into a closure before any later turn of the event loop), but unrelated
+    // focusouts in later tasks see a cleared value and recapture correctly.
+    setTimeout(() => {
+        if (lastPointerDownTarget === event.target) {
+            lastPointerDownTarget = null
+        }
+    }, 0)
+}
+
 function handleTrapKeyDown(event: KeyboardEvent) {
     if (event.key !== 'Tab' || focusTrapStack.length === 0) {
         return
@@ -105,7 +124,7 @@ function handleTrapFocusIn(event: FocusEvent) {
     if (!container.contains(event.target as Node)) {
         const focusableElements = getFocusableElements(container)
         if (focusableElements.length > 0) {
-            focusableElements[0].focus()
+            focusableElements[0].focus({ preventScroll: true })
         }
     }
 }
@@ -119,6 +138,7 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
     if (focusTrapStack.length === 0) {
         document.addEventListener('keydown', handleTrapKeyDown)
         document.addEventListener('focusin', handleTrapFocusIn)
+        document.addEventListener('pointerdown', trackPointerDown, true)
     }
 
     focusTrapStack.push(entry)
@@ -129,13 +149,25 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
             return
         }
 
+        const pointerTarget = lastPointerDownTarget
+
         // Focus went to void — recapture it
         queueMicrotask(() => {
-            if (!container.contains(container.ownerDocument.activeElement)) {
-                const focusableElements = getFocusableElements(container)
-                if (focusableElements.length > 0) {
-                    focusableElements[0].focus()
-                }
+            if (container.contains(container.ownerDocument.activeElement)) {
+                return
+            }
+
+            // User clicked a non-focusable area inside the container (e.g. a label,
+            // padding, or plain text). Leave focus where the browser put it instead
+            // of recapturing — recapturing focuses the first focusable element,
+            // which scrolls the container back to the top of a long modal.
+            if (pointerTarget instanceof Node && container.contains(pointerTarget)) {
+                return
+            }
+
+            const focusableElements = getFocusableElements(container)
+            if (focusableElements.length > 0) {
+                focusableElements[0].focus({ preventScroll: true })
             }
         })
     }
@@ -178,6 +210,8 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
         if (focusTrapStack.length === 0) {
             document.removeEventListener('keydown', handleTrapKeyDown)
             document.removeEventListener('focusin', handleTrapFocusIn)
+            document.removeEventListener('pointerdown', trackPointerDown, true)
+            lastPointerDownTarget = null
         }
 
         if (

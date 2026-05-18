@@ -134,6 +134,71 @@ test.describe('createFocusTrap', () => {
         expect(focusedId).not.toBe('removable-btn')
     })
 
+    test('recaptures focus on later blur even after a prior pointerdown inside the container', async ({ page }) => {
+        await page.click('#open-scrollable-btn')
+        await expect(page.locator('#ds-first')).toBeFocused()
+
+        // Real pointer click on a focusable element inside the dialog. This sets
+        // the internal lastPointerDownTarget to an element inside the container.
+        await page.locator('#ds-mid-input').click()
+        await expect(page.locator('#ds-mid-input')).toBeFocused()
+
+        // Wait long enough for the pointerdown microtask to clear the tracked target.
+        await page.waitForTimeout(20)
+
+        // Programmatically blur the active element. This fires focusout with
+        // relatedTarget=null and is not driven by a pointerdown. If the stale
+        // pointer target were still set, recapture would be wrongly skipped.
+        await page.evaluate(() => {
+            ;(document.activeElement as HTMLElement | null)?.blur()
+        })
+
+        await page.waitForTimeout(50)
+
+        // Focus should be recaptured back into the dialog.
+        const isInDialog = await page
+            .locator('#dialog-scrollable')
+            .evaluate((el) => el.contains(document.activeElement))
+        expect(isInDialog).toBe(true)
+    })
+
+    test('clicking a non-focusable element inside a scrolled container does not recapture focus or reset scroll', async ({
+        page,
+    }) => {
+        await page.click('#open-scrollable-btn')
+        await expect(page.locator('#ds-first')).toBeFocused()
+
+        // Scroll the dialog down so the label is in view but the first input is not.
+        await page.locator('#dialog-scrollable').evaluate((el) => {
+            el.scrollTop = 100
+        })
+        const scrollTopBefore = await page.locator('#dialog-scrollable').evaluate((el) => el.scrollTop)
+        expect(scrollTopBefore).toBe(100)
+
+        // Move focus to the middle input so there's an active element to "lose" on
+        // pointerdown. Use focus() with preventScroll so we don't disturb scrollTop.
+        await page.locator('#ds-mid-input').evaluate((el: HTMLInputElement) => {
+            el.focus({ preventScroll: true })
+        })
+        await expect(page.locator('#ds-mid-input')).toBeFocused()
+
+        // Click a non-focusable element (plain <p>) inside the dialog with a real
+        // pointer event. Before the fix this fired focusout with relatedTarget=null,
+        // which yanked focus to #ds-first and auto-scrolled the dialog back to the
+        // top.
+        await page.locator('#ds-label').click()
+
+        // Wait for queueMicrotask in handleFocusOut to settle.
+        await page.waitForTimeout(50)
+
+        // Scroll position should be preserved.
+        const scrollTopAfter = await page.locator('#dialog-scrollable').evaluate((el) => el.scrollTop)
+        expect(scrollTopAfter).toBe(scrollTopBefore)
+
+        // Focus should NOT have been pulled back to the first input.
+        await expect(page.locator('#ds-first')).not.toBeFocused()
+    })
+
     test('idempotent cleanup', async ({ page }) => {
         await page.click('#open-dialog-btn')
         await expect(page.locator('#d1-first')).toBeFocused()
