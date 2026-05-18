@@ -27,8 +27,8 @@ PRERELEASE=false
 [[ "$TAG" == *-* ]] && PRERELEASE=true
 
 # ── required tools ──────────────────────────────────────────────────────
-command -v npm >/dev/null || die "npm not found"
-command -v gh  >/dev/null || die "gh CLI not found"
+command -v pnpm >/dev/null || die "pnpm not found"
+command -v gh   >/dev/null || die "gh CLI not found"
 
 # ── git state ───────────────────────────────────────────────────────────
 info "Pre-flight checks"
@@ -107,15 +107,15 @@ read -r -p "Proceed? (y/N) " REPLY
 
 # ── bump version ────────────────────────────────────────────────────────
 info "Bumping package.json to $VERSION..."
-npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null
+pnpm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null
 
 # ── sanity build ────────────────────────────────────────────────────────
 info "Running production build..."
-npm run build >/dev/null
+pnpm run build >/dev/null
 
 # Build must not have left source changes behind (e.g. formatter/lint auto-fix).
-# Only package.json + package-lock.json (from npm version) should be modified at this point.
-UNEXPECTED_CHANGES=$(git status --porcelain | grep -vE "^.M (package\.json|package-lock\.json)$" || true)
+# Only package.json should be modified at this point (from pnpm version).
+UNEXPECTED_CHANGES=$(git status --porcelain | grep -vE "^.M package\.json$" || true)
 if [ -n "$UNEXPECTED_CHANGES" ]; then
     echo
     warn "Build modified unexpected files:"
@@ -126,7 +126,7 @@ fi
 success "Build clean"
 
 # ── commit ──────────────────────────────────────────────────────────────
-git add package.json package-lock.json
+git add package.json
 
 if git diff --cached --quiet; then
     warn "Nothing to commit (version unchanged)"

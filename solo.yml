@@ -2,7 +2,7 @@ name: vanilla
 icon: null
 processes:
   Vite Build:
-    command: npm run dev
+    command: pnpm run dev
     working_dir: /Users/pascalbaljet/Sites/vanilla
     auto_start: true
     auto_restart: true
