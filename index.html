@@ -1,93 +1,148 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@inertiaui/vanilla</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #1e293b; padding: 3rem 2rem; }
-        .container { max-width: 640px; margin: 0 auto; }
-        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.25rem; }
-        .subtitle { color: #64748b; margin-bottom: 2rem; }
-        .grid { display: grid; gap: 0.75rem; }
-        a { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; text-decoration: none; color: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
-        a:hover { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5; }
-        .label { font-weight: 500; }
-        .desc { font-size: 0.875rem; color: #64748b; }
-        .tag { font-size: 0.6875rem; font-weight: 500; padding: 0.125rem 0.5rem; border-radius: 9999px; background: #f1f5f9; color: #475569; margin-left: auto; white-space: nowrap; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>@inertiaui/vanilla</h1>
-        <p class="subtitle">E2E test pages</p>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>@inertiaui/vanilla</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+                background: #f8fafc;
+                color: #1e293b;
+                padding: 3rem 2rem;
+            }
+            .container {
+                max-width: 640px;
+                margin: 0 auto;
+            }
+            h1 {
+                font-size: 1.5rem;
+                font-weight: 600;
+                margin-bottom: 0.25rem;
+            }
+            .subtitle {
+                color: #64748b;
+                margin-bottom: 2rem;
+            }
+            .grid {
+                display: grid;
+                gap: 0.75rem;
+            }
+            a {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                padding: 1rem 1.25rem;
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 0.5rem;
+                text-decoration: none;
+                color: inherit;
+                transition:
+                    border-color 0.15s,
+                    box-shadow 0.15s;
+            }
+            a:hover {
+                border-color: #4f46e5;
+                box-shadow: 0 0 0 1px #4f46e5;
+            }
+            .label {
+                font-weight: 500;
+            }
+            .desc {
+                font-size: 0.875rem;
+                color: #64748b;
+            }
+            .tag {
+                font-size: 0.6875rem;
+                font-weight: 500;
+                padding: 0.125rem 0.5rem;
+                border-radius: 9999px;
+                background: #f1f5f9;
+                color: #475569;
+                margin-left: auto;
+                white-space: nowrap;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>@inertiaui/vanilla</h1>
+            <p class="subtitle">E2E test pages</p>
 
-        <div class="grid">
-            <a href="/e2e/pages/click-outside.html">
-                <div>
-                    <div class="label">Click Outside</div>
-                    <div class="desc">Detect clicks outside elements, portal support, multi-target</div>
-                </div>
-                <span class="tag">clickOutside</span>
-            </a>
-            <a href="/e2e/pages/menu.html">
-                <div>
-                    <div class="label">Menu Navigation</div>
-                    <div class="desc">Keyboard navigation, roving tabindex, type-ahead search</div>
-                </div>
-                <span class="tag">menu</span>
-            </a>
-            <a href="/e2e/pages/focus-trap.html">
-                <div>
-                    <div class="label">Focus Trap</div>
-                    <div class="desc">Tab wrapping, nested traps, return focus</div>
-                </div>
-                <span class="tag">dialog</span>
-            </a>
-            <a href="/e2e/pages/scroll-lock.html">
-                <div>
-                    <div class="label">Scroll Lock</div>
-                    <div class="desc">Body scroll locking with reference counting</div>
-                </div>
-                <span class="tag">dialog</span>
-            </a>
-            <a href="/e2e/pages/escape-key.html">
-                <div>
-                    <div class="label">Escape Key</div>
-                    <div class="desc">Escape key handler with preventDefault and stopPropagation</div>
-                </div>
-                <span class="tag">dialog</span>
-            </a>
-            <a href="/e2e/pages/aria-hidden.html">
-                <div>
-                    <div class="label">Aria Hidden</div>
-                    <div class="desc">aria-hidden management with reference counting</div>
-                </div>
-                <span class="tag">dialog</span>
-            </a>
-            <a href="/e2e/pages/position.html">
-                <div>
-                    <div class="label">Positioning</div>
-                    <div class="desc">Floating element placement, flip, offset, autoUpdate</div>
-                </div>
-                <span class="tag">position</span>
-            </a>
-            <a href="/e2e/pages/animate.html">
-                <div>
-                    <div class="label">Animation</div>
-                    <div class="desc">Web Animations API wrapper, easing presets, cancel</div>
-                </div>
-                <span class="tag">animate</span>
-            </a>
-            <a href="/e2e/pages/helpers.html">
-                <div>
-                    <div class="label">Helpers</div>
-                    <div class="desc">generateId, except, only, kebabCase, sameUrlPath, and more</div>
-                </div>
-                <span class="tag">helpers</span>
-            </a>
+            <div class="grid">
+                <a href="/e2e/pages/click-outside.html">
+                    <div>
+                        <div class="label">Click Outside</div>
+                        <div class="desc">Detect clicks outside elements, portal support, multi-target</div>
+                    </div>
+                    <span class="tag">clickOutside</span>
+                </a>
+                <a href="/e2e/pages/menu.html">
+                    <div>
+                        <div class="label">Menu Navigation</div>
+                        <div class="desc">Keyboard navigation, roving tabindex, type-ahead search</div>
+                    </div>
+                    <span class="tag">menu</span>
+                </a>
+                <a href="/e2e/pages/focus-trap.html">
+                    <div>
+                        <div class="label">Focus Trap</div>
+                        <div class="desc">Tab wrapping, nested traps, return focus</div>
+                    </div>
+                    <span class="tag">dialog</span>
+                </a>
+                <a href="/e2e/pages/scroll-lock.html">
+                    <div>
+                        <div class="label">Scroll Lock</div>
+                        <div class="desc">Body scroll locking with reference counting</div>
+                    </div>
+                    <span class="tag">dialog</span>
+                </a>
+                <a href="/e2e/pages/escape-key.html">
+                    <div>
+                        <div class="label">Escape Key</div>
+                        <div class="desc">Escape key handler with preventDefault and stopPropagation</div>
+                    </div>
+                    <span class="tag">dialog</span>
+                </a>
+                <a href="/e2e/pages/aria-hidden.html">
+                    <div>
+                        <div class="label">Aria Hidden</div>
+                        <div class="desc">aria-hidden management with reference counting</div>
+                    </div>
+                    <span class="tag">dialog</span>
+                </a>
+                <a href="/e2e/pages/position.html">
+                    <div>
+                        <div class="label">Positioning</div>
+                        <div class="desc">Floating element placement, flip, offset, autoUpdate</div>
+                    </div>
+                    <span class="tag">position</span>
+                </a>
+                <a href="/e2e/pages/animate.html">
+                    <div>
+                        <div class="label">Animation</div>
+                        <div class="desc">Web Animations API wrapper, easing presets, cancel</div>
+                    </div>
+                    <span class="tag">animate</span>
+                </a>
+                <a href="/e2e/pages/helpers.html">
+                    <div>
+                        <div class="label">Helpers</div>
+                        <div class="desc">generateId, except, only, kebabCase, sameUrlPath, and more</div>
+                    </div>
+                    <span class="tag">helpers</span>
+                </a>
+            </div>
         </div>
-    </div>
-</body>
+    </body>
 </html>

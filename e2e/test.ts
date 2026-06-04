@@ -1,5 +1,6 @@
-import { test as base } from '@playwright/test'
 import path from 'path'
+
+import { test as base } from '@playwright/test'
 
 // Custom fixture that navigates to the matching HTML page before each test.
 // e2e/click-outside.spec.ts → /e2e/pages/click-outside.html
