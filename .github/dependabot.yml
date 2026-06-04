@@ -12,17 +12,3 @@ updates:
           actions:
               patterns:
                   - '*'
-
-    - package-ecosystem: npm
-      directory: /
-      schedule:
-          interval: weekly
-      cooldown:
-          default-days: 5
-      labels:
-          - dependencies
-      groups:
-          dev-dependencies:
-              dependency-type: development
-              patterns:
-                  - '*'
