@@ -1,18 +1,28 @@
 version: 2
 updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      actions:
-        patterns:
-          - "*"
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: weekly
+      cooldown:
+          default-days: 5
+      labels:
+          - dependencies
+      groups:
+          actions:
+              patterns:
+                  - '*'
 
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      dev-dependencies:
-        dependency-type: development
+    - package-ecosystem: npm
+      directory: /
+      schedule:
+          interval: weekly
+      cooldown:
+          default-days: 5
+      labels:
+          - dependencies
+      groups:
+          dev-dependencies:
+              dependency-type: development
+              patterns:
+                  - '*'

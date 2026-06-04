@@ -1,17 +1,17 @@
 name: vanilla
 icon: null
 processes:
-  Vite Build:
-    command: pnpm run dev
-    working_dir: /Users/pascalbaljet/Sites/vanilla
-    auto_start: true
-    auto_restart: true
-    restart_when_changed: []
-    env: {}
-  Vite Webserver:
-    command: npx vite --port 3333
-    working_dir: /Users/pascalbaljet/Sites/vanilla
-    auto_start: true
-    auto_restart: true
-    restart_when_changed: []
-    env: {}
+    Vite Build:
+        command: pnpm run dev
+        working_dir: /Users/pascalbaljet/Sites/vanilla
+        auto_start: true
+        auto_restart: true
+        restart_when_changed: []
+        env: {}
+    Vite Webserver:
+        command: npx vite --port 3333
+        working_dir: /Users/pascalbaljet/Sites/vanilla
+        auto_start: true
+        auto_restart: true
+        restart_when_changed: []
+        env: {}
