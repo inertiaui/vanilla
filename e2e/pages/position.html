@@ -39,6 +39,13 @@
                 <button id="start-auto-btn">Start</button>
                 <button id="stop-auto-btn">Stop</button>
             </div>
+            <div style="font-weight: 600; margin: 0.5rem 0 0.25rem">Size</div>
+            <div class="btn-row">
+                <button id="pos-size-bottom">size bottom</button>
+                <button id="pos-size-top">size top (near bottom)</button>
+                <button id="pos-size-cap">size + var cap</button>
+                <button id="pos-no-size">no size</button>
+            </div>
         </div>
 
         <div class="pos-panel" style="top: 10px; right: 10px">
@@ -62,6 +69,13 @@
             Near bottom
         </div>
         <div id="floating" class="pos-floating"></div>
+        <div
+            id="floating-tall"
+            class="pos-floating"
+            style="width: 150px; height: auto; padding: 4px; box-sizing: border-box"
+        >
+            <div style="height: 1500px">Tall content</div>
+        </div>
 
         <script type="module">
             import { computePosition, autoUpdate } from '../../src/index.ts'
@@ -69,6 +83,7 @@
             const reference = document.getElementById('reference')
             const referenceBottom = document.getElementById('reference-bottom')
             const floating = document.getElementById('floating')
+            const floatingTall = document.getElementById('floating-tall')
             const resultX = document.getElementById('result-x')
             const resultY = document.getElementById('result-y')
             const resultPlacement = document.getElementById('result-placement')
@@ -127,6 +142,38 @@
                 .addEventListener('click', () =>
                     positionWith(referenceBottom, { placement: 'bottom-start', flip: false }),
                 )
+
+            function positionTall(ref, options) {
+                floatingTall.style.top = ''
+                floatingTall.style.left = ''
+                floatingTall.style.position = ''
+                floatingTall.style.maxHeight = ''
+                floatingTall.style.overflowY = ''
+                floatingTall.style.removeProperty('--iui-max-height')
+                floatingTall.style.display = 'block'
+                if (options.cap) {
+                    floatingTall.style.setProperty('--iui-max-height', options.cap)
+                }
+                const result = computePosition(ref, floatingTall, options)
+                resultPlacement.textContent = result.placement
+            }
+
+            document
+                .getElementById('pos-size-bottom')
+                .addEventListener('click', () => positionTall(reference, { placement: 'bottom-start', autoSize: true }))
+            document
+                .getElementById('pos-size-top')
+                .addEventListener('click', () =>
+                    positionTall(referenceBottom, { placement: 'bottom-start', autoSize: true }),
+                )
+            document
+                .getElementById('pos-size-cap')
+                .addEventListener('click', () =>
+                    positionTall(reference, { placement: 'bottom-start', autoSize: true, cap: '120px' }),
+                )
+            document
+                .getElementById('pos-no-size')
+                .addEventListener('click', () => positionTall(reference, { placement: 'bottom-start' }))
 
             document.getElementById('start-auto-btn').addEventListener('click', () => {
                 autoCleanup?.()
