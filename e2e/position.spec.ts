@@ -117,6 +117,88 @@ test.describe('computePosition', () => {
     })
 })
 
+test.describe('size option', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 768 })
+    })
+
+    test('caps height to the space below the reference and adds a scrollbar', async ({ page }) => {
+        await page.click('#pos-size-bottom')
+
+        const floating = page.locator('#floating-tall')
+
+        // Inline styles are applied
+        const maxHeight = await floating.evaluate((el) => el.style.maxHeight)
+        const overflowY = await floating.evaluate((el) => el.style.overflowY)
+        expect(maxHeight).toContain('min(')
+        expect(maxHeight).toContain('var(--iui-max-height, 100vh)')
+        expect(overflowY).toBe('auto')
+
+        // Reference top:300 height:40 → space below ≈ 768 - 340 - 8 = 420
+        const { clientHeight, scrollHeight } = await floating.evaluate((el) => ({
+            clientHeight: el.clientHeight,
+            scrollHeight: el.scrollHeight,
+        }))
+        expect(clientHeight).toBeGreaterThan(400)
+        expect(clientHeight).toBeLessThan(440)
+
+        // Content (1500px) is taller than the cap → element scrolls
+        expect(scrollHeight).toBeGreaterThan(clientHeight)
+
+        // Element stays inside the viewport
+        const box = await floating.boundingBox()
+        expect(box!.y + box!.height).toBeLessThanOrEqual(768)
+    })
+
+    test('shrinks to the small space left below a near-bottom reference', async ({ page }) => {
+        await page.click('#pos-size-top')
+
+        const floating = page.locator('#floating-tall')
+
+        const maxHeight = await floating.evaluate((el) => el.style.maxHeight)
+        expect(maxHeight).toContain('min(')
+        expect(await floating.evaluate((el) => el.style.overflowY)).toBe('auto')
+
+        // Reference sits ~20px from the bottom, so the cap is a small sliver and
+        // the tall content scrolls rather than overflowing the viewport.
+        const { clientHeight, scrollHeight } = await floating.evaluate((el) => ({
+            clientHeight: el.clientHeight,
+            scrollHeight: el.scrollHeight,
+        }))
+        expect(clientHeight).toBeGreaterThan(0)
+        expect(scrollHeight).toBeGreaterThan(clientHeight)
+
+        const box = await floating.boundingBox()
+        expect(box!.y + box!.height).toBeLessThanOrEqual(768 + 2)
+    })
+
+    test('respects the --iui-max-height CSS variable cap', async ({ page }) => {
+        await page.click('#pos-size-cap')
+
+        const floating = page.locator('#floating-tall')
+        // var cap (120px) is smaller than the available space → it wins
+        const clientHeight = await floating.evaluate((el) => el.clientHeight)
+        expect(clientHeight).toBeGreaterThan(110)
+        expect(clientHeight).toBeLessThan(130)
+    })
+
+    test('leaves height unconstrained when size is not set', async ({ page }) => {
+        await page.click('#pos-no-size')
+
+        const floating = page.locator('#floating-tall')
+        expect(await floating.evaluate((el) => el.style.maxHeight)).toBe('')
+        expect(await floating.evaluate((el) => el.style.overflowY)).toBe('')
+
+        // No clamp → full content height, not scrollable
+        const { clientHeight, scrollHeight } = await floating.evaluate((el) => ({
+            clientHeight: el.clientHeight,
+            scrollHeight: el.scrollHeight,
+        }))
+        expect(scrollHeight).toBe(clientHeight)
+        expect(clientHeight).toBeGreaterThan(1000)
+    })
+})
+
 test.describe('autoUpdate', () => {
     test('calls update on scroll and stops after cleanup', async ({ page }) => {
         await page.setViewportSize({ width: 1024, height: 768 })
