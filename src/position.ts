@@ -24,7 +24,7 @@ export interface PositionOptions {
      * `max-height` and `overflow-y: auto`. Mirrors the auto-sizing Headless UI
      * applied via its `anchor` prop, so long menus scroll instead of overflowing.
      */
-    size?: boolean
+    autoSize?: boolean
 }
 
 export interface PositionResult {
@@ -345,7 +345,7 @@ export function computePosition(
     floating: HTMLElement,
     options: PositionOptions = {},
 ): PositionResult {
-    const { placement = 'bottom-start', offset = 0, flip = true, size = false } = options
+    const { placement = 'bottom-start', offset = 0, flip = true, autoSize = false } = options
 
     if (supportsAnchorPositioning()) {
         // CSS handles the positioning — just set it up and return current coords
@@ -353,7 +353,7 @@ export function computePosition(
         if (!existingClass) {
             setupAnchorPositioning(reference, floating, placement, offset, flip)
         }
-        if (size) {
+        if (autoSize) {
             applySize(reference, floating, offset)
         }
         const rect = floating.getBoundingClientRect()
@@ -362,14 +362,14 @@ export function computePosition(
 
     // JS fallback. Pre-size with the requested side so a tall element is already
     // capped before positioning, avoiding a first-frame clamp to the viewport edge.
-    if (size) {
+    if (autoSize) {
         applySize(reference, floating, offset, placement.split('-')[0])
     }
     const result = computeWithFallback(reference, floating, { placement, offset, flip })
     floating.style.position = 'fixed'
     floating.style.top = `${result.y}px`
     floating.style.left = `${result.x}px`
-    if (size) {
+    if (autoSize) {
         applySize(reference, floating, offset, result.placement.split('-')[0])
     }
     return result

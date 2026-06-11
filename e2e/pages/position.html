@@ -160,16 +160,16 @@
 
             document
                 .getElementById('pos-size-bottom')
-                .addEventListener('click', () => positionTall(reference, { placement: 'bottom-start', size: true }))
+                .addEventListener('click', () => positionTall(reference, { placement: 'bottom-start', autoSize: true }))
             document
                 .getElementById('pos-size-top')
                 .addEventListener('click', () =>
-                    positionTall(referenceBottom, { placement: 'bottom-start', size: true }),
+                    positionTall(referenceBottom, { placement: 'bottom-start', autoSize: true }),
                 )
             document
                 .getElementById('pos-size-cap')
                 .addEventListener('click', () =>
-                    positionTall(reference, { placement: 'bottom-start', size: true, cap: '120px' }),
+                    positionTall(reference, { placement: 'bottom-start', autoSize: true, cap: '120px' }),
                 )
             document
                 .getElementById('pos-no-size')

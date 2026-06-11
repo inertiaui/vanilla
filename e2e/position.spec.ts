@@ -117,7 +117,7 @@ test.describe('computePosition', () => {
     })
 })
 
-test.describe('size option', () => {
+test.describe('autoSize option', () => {
     test.beforeEach(async ({ page }) => {
         await page.setViewportSize({ width: 1024, height: 768 })
     })
@@ -182,7 +182,7 @@ test.describe('size option', () => {
         expect(clientHeight).toBeLessThan(130)
     })
 
-    test('leaves height unconstrained when size is not set', async ({ page }) => {
+    test('leaves height unconstrained when autoSize is not set', async ({ page }) => {
         await page.click('#pos-no-size')
 
         const floating = page.locator('#floating-tall')
