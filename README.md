@@ -28,6 +28,7 @@ npm install @inertiaui/vanilla
 - [Dark Mode Detection](#dark-mode-detection)
 - [RTL Support](#rtl-support)
 - [Debounce](#debounce)
+- [Color](#color)
 - [Helpers](#helpers)
   - [generateId](#generateid)
   - [blank](#blank)
@@ -374,6 +375,7 @@ The function applies positioning styles to the floating element automatically (`
 | `placement` | `Placement` | `'bottom-start'` | Where to position the floating element |
 | `offset` | `number` | `0` | Distance in pixels between reference and floating element |
 | `flip` | `boolean` | `true` | Flip to opposite side when overflowing viewport |
+| `autoSize` | `boolean` | `false` | Constrain the floating element to the available viewport space (sets `max-height` and `overflow-y: auto`) |
 
 #### Placements
 
@@ -412,6 +414,26 @@ const result = computePosition(reference, floating, {
 #### Viewport Clamping
 
 The floating element is always clamped to stay within the viewport with a 4px margin, even after flipping.
+
+#### Auto Sizing
+
+Enable `autoSize` to cap the floating element's height to the space between its anchored edge and the viewport edge, adding a scrollbar when the content is taller. Useful for long menus that would otherwise overflow.
+
+```typescript
+computePosition(reference, floating, {
+    placement: 'bottom-start',
+    offset: 8,
+    autoSize: true,
+})
+```
+
+This sets `max-height` and `overflow-y: auto` on the floating element. Cap the height further via the `--iui-max-height` CSS variable (mirrors Headless UI's `--anchor-max-height`):
+
+```css
+.menu {
+    --iui-max-height: 20rem;
+}
+```
 
 ### autoUpdate
 
@@ -746,6 +768,37 @@ import { detectFramerate } from '@inertiaui/vanilla'
 
 const fps = await detectFramerate()
 console.log(`Running at ${fps} FPS`)
+```
+
+## Color
+
+Convert colors between hex and HSL.
+
+### hexToHsl
+
+Convert a hex color string to HSL values. Accepts the string with or without a leading `#`. Returns an `HslColor` object (`{ h, s, l }`) with `h` in `0–360` and `s`/`l` in `0–100`. Invalid input falls back to `{ h: 0, s: 100, l: 50 }`.
+
+```typescript
+import { hexToHsl } from '@inertiaui/vanilla'
+
+hexToHsl('#3490dc') // { h: 207, s: 71, l: 53 }
+hexToHsl('3490dc')  // same — leading '#' is optional
+```
+
+### hslToHex
+
+Convert HSL values to a hex color string (with leading `#`). Expects `h: 0–360`, `s: 0–100`, `l: 0–100`.
+
+```typescript
+import { hslToHex } from '@inertiaui/vanilla'
+
+hslToHex(207, 71, 53) // '#3290dc'
+```
+
+The `HslColor` type is also exported:
+
+```typescript
+import type { HslColor } from '@inertiaui/vanilla'
 ```
 
 ## Helpers
