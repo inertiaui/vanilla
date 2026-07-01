@@ -8,6 +8,8 @@ test.describe('computePosition', () => {
     test('bottom-start placement positions below reference', async ({ page }) => {
         await page.click('#pos-bottom-start')
 
+        await expect(page.locator('#floating')).toBeVisible()
+
         const refBox = await page.locator('#reference').boundingBox()
         const floatingBox = await page.locator('#floating').boundingBox()
 
@@ -220,6 +222,65 @@ test.describe('autoUpdate', () => {
         await page.evaluate(() => window.scrollBy(0, 100))
         await page.waitForTimeout(100)
         const countAfterSecondScroll = Number(await page.locator('#auto-update-count').textContent())
+        expect(countAfterSecondScroll).toBe(countAfterStop)
+    })
+})
+
+test.describe('positionTopLayerPopover', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 768 })
+    })
+
+    test('positions a top-layer popover and matches reference width', async ({ page }) => {
+        await page.click('#pos-top-layer')
+
+        const refBox = await page.locator('#reference-wide').boundingBox()
+        const floatingBox = await page.locator('#top-layer-popover').boundingBox()
+
+        expect(floatingBox!.y).toBeGreaterThanOrEqual(refBox!.y + refBox!.height - 2)
+        expect(Math.abs(floatingBox!.x - refBox!.x)).toBeLessThan(5)
+        expect(Math.abs(floatingBox!.width - refBox!.width)).toBeLessThan(2)
+        await expect(page.locator('#result-placement')).toHaveText('bottom-start')
+
+        await expect(page.locator('#top-layer-popover')).toBeVisible()
+        await expect(page.locator('#floating-style-pos')).toHaveText('fixed')
+    })
+
+    test('flips a tall top-layer popover and constrains height to available space', async ({ page }) => {
+        await page.click('#pos-top-layer-flip')
+
+        const refBox = await page.locator('#reference-bottom').boundingBox()
+        const floatingBox = await page.locator('#top-layer-popover').boundingBox()
+
+        expect(floatingBox!.y + floatingBox!.height).toBeLessThanOrEqual(refBox!.y + 2)
+        await expect(page.locator('#result-placement')).toHaveText('top-start')
+
+        const { clientHeight, scrollHeight, maxHeight } = await page.locator('#top-layer-popover').evaluate((el) => ({
+            clientHeight: el.clientHeight,
+            scrollHeight: el.scrollHeight,
+            maxHeight: (el as HTMLElement).style.maxHeight,
+        }))
+        expect(maxHeight).toContain('px')
+        expect(scrollHeight).toBeGreaterThan(clientHeight)
+        expect(floatingBox!.y).toBeGreaterThanOrEqual(8)
+    })
+
+    test('auto-updates top-layer popovers and stops after cleanup', async ({ page }) => {
+        await page.click('#start-top-layer-auto-btn')
+
+        await page.waitForTimeout(100)
+        const countAfterStart = Number(await page.locator('#top-layer-auto-update-count').textContent())
+
+        await page.evaluate(() => window.scrollBy(0, 100))
+        await page.waitForTimeout(100)
+        const countAfterScroll = Number(await page.locator('#top-layer-auto-update-count').textContent())
+        expect(countAfterScroll).toBeGreaterThan(countAfterStart)
+
+        await page.click('#stop-top-layer-auto-btn')
+        const countAfterStop = Number(await page.locator('#top-layer-auto-update-count').textContent())
+        await page.evaluate(() => window.scrollBy(0, 100))
+        await page.waitForTimeout(100)
+        const countAfterSecondScroll = Number(await page.locator('#top-layer-auto-update-count').textContent())
         expect(countAfterSecondScroll).toBe(countAfterStop)
     })
 })

@@ -27,10 +27,32 @@ export interface PositionOptions {
     autoSize?: boolean
 }
 
+export interface TopLayerPopoverPositionOptions {
+    placement?: Placement
+    offset?: number
+    flip?: boolean
+    matchReferenceWidth?: boolean
+    viewportMargin?: number
+}
+
 export interface PositionResult {
     x: number
     y: number
     placement: Placement
+}
+
+interface ViewportRect {
+    top: number
+    right: number
+    bottom: number
+    left: number
+    width: number
+    height: number
+}
+
+interface FloatingSize {
+    width: number
+    height: number
 }
 
 const ANCHOR_CLASS_PREFIX = 'iui-anchor-'
@@ -65,6 +87,91 @@ function getOppositePlacement(placement: Placement): Placement {
         'right-end': 'left-end',
     }
     return map[placement] || placement
+}
+
+function getViewportRect(): ViewportRect {
+    const visualViewport = window.visualViewport
+
+    if (visualViewport) {
+        return {
+            top: visualViewport.offsetTop,
+            right: visualViewport.offsetLeft + visualViewport.width,
+            bottom: visualViewport.offsetTop + visualViewport.height,
+            left: visualViewport.offsetLeft,
+            width: visualViewport.width,
+            height: visualViewport.height,
+        }
+    }
+
+    return {
+        top: 0,
+        right: window.innerWidth,
+        bottom: window.innerHeight,
+        left: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+    }
+}
+
+function clamp(value: number, min: number, max: number): number {
+    if (max < min) {
+        return min
+    }
+
+    return Math.max(min, Math.min(value, max))
+}
+
+function getAvailableSpace(
+    referenceRect: DOMRect,
+    viewport: ViewportRect,
+    side: string,
+    offset: number,
+    margin: number,
+): number {
+    if (side === 'top') {
+        return referenceRect.top - viewport.top - offset - margin
+    }
+
+    if (side === 'bottom') {
+        return viewport.bottom - referenceRect.bottom - offset - margin
+    }
+
+    if (side === 'left') {
+        return referenceRect.left - viewport.left - offset - margin
+    }
+
+    if (side === 'right') {
+        return viewport.right - referenceRect.right - offset - margin
+    }
+
+    return viewport.height - margin * 2
+}
+
+function resolveTopLayerPlacement(
+    preferredPlacement: Placement,
+    referenceRect: DOMRect,
+    floatingSize: FloatingSize,
+    viewport: ViewportRect,
+    offset: number,
+    margin: number,
+    flip: boolean,
+): Placement {
+    if (!flip) {
+        return preferredPlacement
+    }
+
+    const [side] = preferredPlacement.split('-')
+    const oppositePlacement = getOppositePlacement(preferredPlacement)
+    const [oppositeSide] = oppositePlacement.split('-')
+    const floatingLength = side === 'left' || side === 'right' ? floatingSize.width : floatingSize.height
+    const preferredSpace = getAvailableSpace(referenceRect, viewport, side, offset, margin)
+    const oppositeSpace = getAvailableSpace(referenceRect, viewport, oppositeSide, offset, margin)
+
+    if (floatingLength > preferredSpace && oppositeSpace > preferredSpace) {
+        return oppositePlacement
+    }
+
+    return preferredPlacement
 }
 
 function computePositionFromRect(
@@ -302,6 +409,17 @@ function cleanupAnchorPositioning(reference: HTMLElement, floating: HTMLElement,
     }
 }
 
+function detachAnchorPositioning(reference: HTMLElement, floating: HTMLElement): void {
+    reference.style.removeProperty('anchor-name')
+    floating.style.removeProperty('position-anchor')
+
+    for (const className of Array.from(floating.classList)) {
+        if (className.startsWith(ANCHOR_CLASS_PREFIX)) {
+            floating.classList.remove(className)
+        }
+    }
+}
+
 // Margin between the floating element and the viewport edge when sizing.
 const SIZE_MARGIN = 8
 
@@ -415,5 +533,116 @@ export function autoUpdate(reference: HTMLElement, floating: HTMLElement, update
         if (anchorClass) {
             cleanupAnchorPositioning(reference, floating, anchorClass)
         }
+    }
+}
+
+export function positionTopLayerPopover(
+    reference: HTMLElement,
+    floating: HTMLElement,
+    options: TopLayerPopoverPositionOptions = {},
+): PositionResult {
+    const {
+        placement = 'bottom-start',
+        offset = 4,
+        flip = true,
+        matchReferenceWidth = false,
+        viewportMargin = 8,
+    } = options
+    const viewport = getViewportRect()
+    const maxWidth = Math.max(0, Math.floor(viewport.width - viewportMargin * 2))
+
+    detachAnchorPositioning(reference, floating)
+
+    floating.style.position = 'fixed'
+    floating.style.inset = 'auto'
+    floating.style.right = 'auto'
+    floating.style.bottom = 'auto'
+    floating.style.margin = '0'
+    floating.style.boxSizing = 'border-box'
+    floating.style.maxWidth = `${maxWidth}px`
+    floating.style.overflowX = 'auto'
+    floating.style.overflowY = 'auto'
+    floating.style.overscrollBehavior = 'contain'
+
+    const referenceRect = reference.getBoundingClientRect()
+
+    if (matchReferenceWidth) {
+        floating.style.width = `${Math.min(referenceRect.width, maxWidth)}px`
+    }
+
+    const measuredRect = floating.getBoundingClientRect()
+    const naturalSize = {
+        width: Math.max(measuredRect.width, floating.scrollWidth),
+        height: Math.max(measuredRect.height, floating.scrollHeight),
+    }
+    const resolvedPlacement = resolveTopLayerPlacement(
+        placement,
+        referenceRect,
+        naturalSize,
+        viewport,
+        offset,
+        viewportMargin,
+        flip,
+    )
+    const [resolvedSide] = resolvedPlacement.split('-')
+    const availableHeight = Math.max(
+        0,
+        Math.floor(getAvailableSpace(referenceRect, viewport, resolvedSide, offset, viewportMargin)),
+    )
+
+    if (resolvedSide === 'top' || resolvedSide === 'bottom') {
+        floating.style.maxHeight = `${availableHeight}px`
+    } else {
+        floating.style.maxHeight = `${Math.max(0, Math.floor(viewport.height - viewportMargin * 2))}px`
+    }
+
+    const floatingRect = floating.getBoundingClientRect()
+    const coordinates = computePositionFromRect(referenceRect, floatingRect, resolvedPlacement, offset)
+    const x = clamp(coordinates.x, viewport.left + viewportMargin, viewport.right - floatingRect.width - viewportMargin)
+    const y = clamp(
+        coordinates.y,
+        viewport.top + viewportMargin,
+        viewport.bottom - floatingRect.height - viewportMargin,
+    )
+
+    floating.style.left = `${Math.round(x)}px`
+    floating.style.top = `${Math.round(y)}px`
+
+    return { x, y, placement: resolvedPlacement }
+}
+
+export function autoUpdateTopLayerPopover(
+    reference: HTMLElement,
+    floating: HTMLElement,
+    update: () => void,
+): CleanupFunction {
+    const cleanupAutoUpdate = autoUpdate(reference, floating, update)
+    const visualViewport = window.visualViewport
+    let rafId: number | null = null
+
+    const scheduleUpdate = () => {
+        if (rafId !== null) {
+            return
+        }
+
+        rafId = requestAnimationFrame(() => {
+            rafId = null
+            update()
+        })
+    }
+
+    visualViewport?.addEventListener('resize', scheduleUpdate)
+    visualViewport?.addEventListener('scroll', scheduleUpdate)
+
+    return () => {
+        cleanupAutoUpdate()
+
+        if (rafId !== null) {
+            cancelAnimationFrame(rafId)
+            rafId = null
+        }
+
+        visualViewport?.removeEventListener('resize', scheduleUpdate)
+        visualViewport?.removeEventListener('scroll', scheduleUpdate)
     }
 }

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Reorder</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            .reorder-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                max-width: 320px;
+            }
+
+            .reorder-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 12px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                background: #fff;
+            }
+
+            .reorder-item.dragged {
+                opacity: 0.5;
+            }
+
+            .reorder-item.target {
+                border-color: #2563eb;
+                box-shadow: inset 0 0 0 1px #2563eb;
+            }
+
+            .reorder-handle {
+                cursor: grab;
+                touch-action: none;
+                user-select: none;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Reorder</h1>
+        <p class="page-desc">
+            Framework-agnostic reorder primitives: pointer-drag controller plus keyboard moves via
+            <code>moveArrayItem</code>. Drag a handle, or focus an item and press Arrow Up/Down.
+        </p>
+
+        <section>
+            <h2>Pointer + keyboard reorder</h2>
+            <ul id="list" class="reorder-list"></ul>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Order:</span> <span class="value" id="order-value"></span
+                ></span>
+                <span class="status"
+                    ><span class="label">Dragging:</span> <span class="value" id="dragging-value">no</span></span
+                >
+                <span class="status"
+                    ><span class="label">Target:</span> <span class="value" id="target-value">none</span></span
+                >
+                <span class="status"
+                    ><span class="label">Last move:</span> <span class="value" id="move-value">none</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import {
+                createPointerReorder,
+                getInsertionIndexFromPoint,
+                moveArrayItem,
+                REORDERABLE_LIST_HANDLE_ATTRIBUTE,
+                resolveTargetIndexFromInsertion,
+            } from '../../src/reorder.ts'
+
+            // Exposed for pure-function unit tests via page.evaluate.
+            window.reorder = { moveArrayItem, getInsertionIndexFromPoint, resolveTargetIndexFromInsertion }
+
+            let items = ['Apple', 'Banana', 'Cherry', 'Date']
+
+            const listEl = document.getElementById('list')
+            const orderValue = document.getElementById('order-value')
+            const draggingValue = document.getElementById('dragging-value')
+            const targetValue = document.getElementById('target-value')
+            const moveValue = document.getElementById('move-value')
+
+            const itemElements = new Map()
+            let state = { draggedIndex: null, insertionIndex: null, targetIndex: null }
+
+            const controller = createPointerReorder({
+                getItemCount: () => items.length,
+                getHitBoxes: () =>
+                    items
+                        .map((_, index) => {
+                            const el = itemElements.get(index)
+                            if (!el) return null
+                            const rect = el.getBoundingClientRect()
+                            return { index, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                        })
+                        .filter(Boolean),
+                onChange: (next) => {
+                    state = next
+                    render()
+                },
+                onCommit: (fromIndex, toIndex, source) => {
+                    items = moveArrayItem(items, fromIndex, toIndex)
+                    moveValue.textContent = `${source}: ${fromIndex} -> ${toIndex}`
+                    render()
+                },
+            })
+
+            function moveByKeyboard(index, direction) {
+                const toIndex = direction === 'up' ? index - 1 : index + 1
+                if (toIndex < 0 || toIndex >= items.length) return
+                items = moveArrayItem(items, index, toIndex)
+                moveValue.textContent = `keyboard: ${index} -> ${toIndex}`
+                render(toIndex)
+            }
+
+            function render(focusIndex = null) {
+                orderValue.textContent = items.join(',')
+                draggingValue.textContent = controller.isDragging() ? 'yes' : 'no'
+                targetValue.textContent = state.targetIndex === null ? 'none' : String(state.targetIndex)
+
+                listEl.innerHTML = ''
+                itemElements.clear()
+
+                items.forEach((label, index) => {
+                    const li = document.createElement('li')
+                    li.className = 'reorder-item'
+                    li.id = `item-${index}`
+                    li.tabIndex = 0
+                    li.dataset.label = label
+                    if (index === state.draggedIndex) li.classList.add('dragged')
+                    if (index === state.targetIndex) li.classList.add('target')
+
+                    const handle = document.createElement('span')
+                    handle.className = 'reorder-handle'
+                    handle.id = `handle-${index}`
+                    handle.textContent = 'drag'
+                    handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+                    handle.addEventListener('pointerdown', (event) => controller.pointerDown(index, event))
+
+                    const text = document.createElement('span')
+                    text.textContent = label
+
+                    li.append(handle, text)
+                    li.addEventListener('keydown', (event) => {
+                        if (event.key === 'ArrowUp') {
+                            event.preventDefault()
+                            moveByKeyboard(index, 'up')
+                        } else if (event.key === 'ArrowDown') {
+                            event.preventDefault()
+                            moveByKeyboard(index, 'down')
+                        }
+                    })
+
+                    itemElements.set(index, li)
+                    listEl.appendChild(li)
+                })
+
+                if (focusIndex !== null) {
+                    itemElements.get(focusIndex)?.focus()
+                }
+            }
+
+            render()
+        </script>
+    </body>
+</html>
