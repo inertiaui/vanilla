@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Native Popover</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            body {
+                min-height: 1600px;
+            }
+
+            #popover {
+                width: 180px;
+                padding: 0.75rem;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                background: white;
+                box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+            }
+
+            #reference {
+                width: 180px;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Native Popover</h1>
+        <p class="page-desc">
+            Native popover disclosure controller with positioning, toggle sync, and focus-out dismiss.
+        </p>
+
+        <section>
+            <h2>Disclosure</h2>
+            <div id="container">
+                <div class="btn-row">
+                    <button id="reference">Open popover</button>
+                    <button id="toggle-btn">Toggle</button>
+                    <button id="close-btn">Close</button>
+                    <button id="close-no-hide-btn">Close without hide</button>
+                    <button id="native-hide-btn">Native hide</button>
+                    <button id="cleanup-btn">Cleanup</button>
+                </div>
+                <div id="popover" popover="manual">
+                    <button id="inside-btn">Inside popover</button>
+                </div>
+            </div>
+            <button id="outside-btn" style="margin-top: 0.75rem">Outside focus target</button>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Open:</span> <span class="value" id="open-value">false</span></span
+                >
+                <span class="status"
+                    ><span class="label">Native:</span> <span class="value" id="native-open-value">false</span></span
+                >
+                <span class="status"
+                    ><span class="label">Changes:</span> <span class="value" id="change-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Before:</span> <span class="value" id="before-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Close:</span> <span class="value" id="close-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Toggle close:</span> <span class="value" id="toggle-close-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Dismiss:</span> <span class="value" id="dismiss-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Last close:</span> <span class="value" id="last-close-value">none</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import { createNativePopoverDisclosure } from '../../src/index.ts'
+
+            const container = document.getElementById('container')
+            const reference = document.getElementById('reference')
+            const popover = document.getElementById('popover')
+            const insideBtn = document.getElementById('inside-btn')
+            const outsideBtn = document.getElementById('outside-btn')
+            const openValue = document.getElementById('open-value')
+            const nativeOpenValue = document.getElementById('native-open-value')
+            const changeCountValue = document.getElementById('change-count')
+            const beforeCountValue = document.getElementById('before-count')
+            const closeCountValue = document.getElementById('close-count')
+            const toggleCloseCountValue = document.getElementById('toggle-close-count')
+            const dismissCountValue = document.getElementById('dismiss-count')
+            const lastCloseValue = document.getElementById('last-close-value')
+
+            let changeCount = 0
+            let beforeCount = 0
+            let closeCount = 0
+            let toggleCloseCount = 0
+            let dismissCount = 0
+            let disclosure = null
+
+            function updateDisplay() {
+                openValue.textContent = String(disclosure?.isOpen ?? false)
+                nativeOpenValue.textContent = String(popover.matches(':popover-open'))
+                changeCountValue.textContent = String(changeCount)
+                beforeCountValue.textContent = String(beforeCount)
+                closeCountValue.textContent = String(closeCount)
+                toggleCloseCountValue.textContent = String(toggleCloseCount)
+                dismissCountValue.textContent = String(dismissCount)
+            }
+
+            disclosure = createNativePopoverDisclosure({
+                reference: () => reference,
+                popover: () => popover,
+                position: {
+                    placement: 'bottom-start',
+                    offset: 6,
+                    matchReferenceWidth: true,
+                    anchorPositioning: false,
+                },
+                focusOut: {
+                    container: () => container,
+                    delay: 30,
+                    onDismiss: () => {
+                        dismissCount++
+                        disclosure.closePopover({
+                            onClose: () => {
+                                closeCount++
+                            },
+                        })
+                        updateDisplay()
+                    },
+                },
+                onOpenChange: () => {
+                    changeCount++
+                    updateDisplay()
+                },
+            })
+
+            function openWithLifecycle() {
+                disclosure.openPopover({
+                    onBeforeOpen: () => {
+                        beforeCount++
+                    },
+                })
+                disclosure.showPopover()
+                disclosure.updatePosition()
+                disclosure.startAutoUpdate()
+                updateDisplay()
+            }
+
+            function closeWithLifecycle(options = {}) {
+                const closed = disclosure.closePopover({
+                    ...options,
+                    onClose: () => {
+                        closeCount++
+                        options.onClose?.()
+                    },
+                })
+                lastCloseValue.textContent = String(closed)
+                updateDisplay()
+            }
+
+            reference.addEventListener('click', openWithLifecycle)
+            document.getElementById('close-btn').addEventListener('click', () => closeWithLifecycle())
+            document
+                .getElementById('close-no-hide-btn')
+                .addEventListener('click', () => closeWithLifecycle({ hide: false }))
+            document.getElementById('toggle-btn').addEventListener('click', () => {
+                disclosure.togglePopover(openWithLifecycle, () => closeWithLifecycle())
+                updateDisplay()
+            })
+            document.getElementById('native-hide-btn').addEventListener('click', () => {
+                popover.hidePopover()
+                updateDisplay()
+            })
+            document.getElementById('cleanup-btn').addEventListener('click', () => {
+                disclosure.cleanupPopover()
+                updateDisplay()
+            })
+
+            popover.addEventListener('toggle', (event) => {
+                disclosure.handlePopoverToggle(event, {
+                    onClose: () => {
+                        toggleCloseCount++
+                    },
+                })
+                updateDisplay()
+            })
+
+            popover.addEventListener('focusout', (event) => {
+                disclosure.handleFocusOut(event)
+            })
+
+            window.nativePopoverDemo = {
+                focusInside: () => insideBtn.focus(),
+                focusOutside: () => outsideBtn.focus(),
+                metrics: () => {
+                    const ref = reference.getBoundingClientRect()
+                    const floating = popover.getBoundingClientRect()
+
+                    return {
+                        referenceBottom: ref.bottom,
+                        popoverTop: floating.top,
+                        gap: floating.top - ref.bottom,
+                        widthDelta: Math.abs(floating.width - ref.width),
+                    }
+                },
+            }
+
+            updateDisplay()
+        </script>
+    </body>
+</html>

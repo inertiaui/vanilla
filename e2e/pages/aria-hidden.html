@@ -62,21 +62,51 @@
             </div>
         </section>
 
+        <section>
+            <h2>Inert target</h2>
+            <p class="hint">
+                Mark/unmark this element with <code>markInert</code>. Browsers with native inert disable focus and
+                pointer interaction; older browsers fall back to <code>aria-hidden</code>.
+            </p>
+            <div id="inert-target" class="panel">
+                <button id="inert-child-btn">Focusable child</button>
+            </div>
+            <div class="btn-row" style="margin-top: 0.75rem">
+                <button id="mark-inert-btn">Mark inert</button>
+                <button id="mark-inert-selector-btn">Mark inert by selector</button>
+                <button id="unmark-inert-btn">Unmark inert</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">inert:</span> <span class="value" id="inert-value">false</span></span
+                >
+                <span class="status"
+                    ><span class="label">aria-hidden:</span> <span class="value" id="inert-aria-value">null</span></span
+                >
+            </div>
+        </section>
+
         <script type="module">
-            import { markAriaHidden } from '../../src/index.ts'
+            import { markAriaHidden, markInert } from '../../src/index.ts'
 
             const target = document.getElementById('target')
             const targetWithValue = document.getElementById('target-with-value')
+            const inertTarget = document.getElementById('inert-target')
             const ariaValue = document.getElementById('aria-value')
             const ariaValueExisting = document.getElementById('aria-value-existing')
+            const inertValue = document.getElementById('inert-value')
+            const inertAriaValue = document.getElementById('inert-aria-value')
 
             let cleanups = []
             let existingCleanups = []
+            let inertCleanups = []
             let nonexistentCleanup = null
 
             function updateDisplay() {
                 ariaValue.textContent = target.getAttribute('aria-hidden') ?? 'null'
                 ariaValueExisting.textContent = targetWithValue.getAttribute('aria-hidden') ?? 'null'
+                inertValue.textContent = inertTarget.inert ? 'true' : 'false'
+                inertAriaValue.textContent = inertTarget.getAttribute('aria-hidden') ?? 'null'
             }
 
             document.getElementById('mark-btn').addEventListener('click', () => {
@@ -116,6 +146,95 @@
                 nonexistentCleanup = null
                 updateDisplay()
             })
+
+            document.getElementById('mark-inert-btn').addEventListener('click', () => {
+                inertCleanups.push(markInert(inertTarget))
+                updateDisplay()
+            })
+
+            document.getElementById('mark-inert-selector-btn').addEventListener('click', () => {
+                inertCleanups.push(markInert('#inert-target'))
+                updateDisplay()
+            })
+
+            document.getElementById('unmark-inert-btn').addEventListener('click', () => {
+                const fn = inertCleanups.pop()
+                fn?.()
+                updateDisplay()
+            })
+
+            function findInertDescriptor() {
+                let proto = HTMLElement.prototype
+
+                while (proto) {
+                    const descriptor = Object.getOwnPropertyDescriptor(proto, 'inert')
+
+                    if (descriptor) {
+                        return { proto, descriptor }
+                    }
+
+                    proto = Object.getPrototypeOf(proto)
+                }
+
+                return null
+            }
+
+            window.ariaHiddenDemo = {
+                markInertWithExistingAria: () => {
+                    const element = document.createElement('div')
+                    element.setAttribute('aria-hidden', 'false')
+                    document.body.append(element)
+
+                    const cleanup = markInert(element)
+                    const marked = {
+                        inert: Boolean(element.inert),
+                        ariaHidden: element.getAttribute('aria-hidden'),
+                    }
+
+                    cleanup()
+                    const restored = {
+                        inert: Boolean(element.inert),
+                        ariaHidden: element.getAttribute('aria-hidden'),
+                    }
+
+                    element.remove()
+
+                    return { marked, restored }
+                },
+                markInertWithoutNativeSupport: () => {
+                    const nativeInert = findInertDescriptor()
+
+                    if (!nativeInert?.descriptor.configurable) {
+                        return { supported: false }
+                    }
+
+                    delete nativeInert.proto.inert
+
+                    try {
+                        const element = document.createElement('div')
+                        element.setAttribute('aria-hidden', 'false')
+                        document.body.append(element)
+
+                        const cleanup = markInert(element)
+                        const marked = {
+                            hasNativeInert: 'inert' in element,
+                            ariaHidden: element.getAttribute('aria-hidden'),
+                        }
+
+                        cleanup()
+                        const restored = {
+                            hasNativeInert: 'inert' in element,
+                            ariaHidden: element.getAttribute('aria-hidden'),
+                        }
+
+                        element.remove()
+
+                        return { supported: true, marked, restored }
+                    } finally {
+                        Object.defineProperty(nativeInert.proto, 'inert', nativeInert.descriptor)
+                    }
+                },
+            }
         </script>
     </body>
 </html>

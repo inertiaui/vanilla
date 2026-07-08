@@ -73,4 +73,14 @@ test.describe('onClickOutside', () => {
         await expect(page.locator('#same-tick-status')).toHaveText('open')
         await expect(page.locator('#same-tick-dropdown')).toBeVisible()
     })
+
+    test('cleanup before deferred listener registration prevents later outside clicks', async ({ page }) => {
+        await page.click('#cleanup-before-timeout-btn')
+        await page.waitForTimeout(20)
+
+        await page.click('h1')
+
+        await expect(page.locator('#cleanup-before-timeout-status')).toHaveText('open')
+        await expect(page.locator('#cleanup-before-timeout-dropdown')).toBeVisible()
+    })
 })

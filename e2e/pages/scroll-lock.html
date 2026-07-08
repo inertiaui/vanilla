@@ -26,6 +26,7 @@
                 <button id="lock-btn">Lock scroll</button>
                 <button id="unlock-btn">Unlock scroll</button>
                 <button id="set-overflow-auto">Set overflow to "auto" first</button>
+                <button id="set-scrollbar-gutter">Set scrollbar gutter first</button>
             </div>
             <div class="status-row">
                 <span class="status"
@@ -37,6 +38,10 @@
                 <span class="status"
                     ><span class="label">body.paddingRight:</span> <span class="value" id="padding-value"></span
                 ></span>
+                <span class="status"
+                    ><span class="label">html.scrollbarGutter:</span>
+                    <span class="value" id="scrollbar-gutter-value"></span
+                ></span>
             </div>
         </section>
 
@@ -47,11 +52,13 @@
             const lockCount = document.getElementById('lock-count')
             const overflowValue = document.getElementById('overflow-value')
             const paddingValue = document.getElementById('padding-value')
+            const scrollbarGutterValue = document.getElementById('scrollbar-gutter-value')
 
             function updateDisplay() {
                 lockCount.textContent = String(cleanups.length)
                 overflowValue.textContent = document.body.style.overflow
                 paddingValue.textContent = document.body.style.paddingRight
+                scrollbarGutterValue.textContent = document.documentElement.style.scrollbarGutter
             }
 
             updateDisplay()
@@ -69,6 +76,11 @@
 
             document.getElementById('set-overflow-auto').addEventListener('click', () => {
                 document.body.style.overflow = 'auto'
+                updateDisplay()
+            })
+
+            document.getElementById('set-scrollbar-gutter').addEventListener('click', () => {
+                document.documentElement.style.scrollbarGutter = 'stable both-edges'
                 updateDisplay()
             })
         </script>
