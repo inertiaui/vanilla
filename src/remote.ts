@@ -2,9 +2,9 @@
  * Framework-agnostic helpers for debounced, abortable remote requests.
  *
  * These are the generic mechanics behind typeahead/async-search controls:
- * a debounced scheduler, stale-request aborting, sequence guarding, a JSON
- * fetch helper, and a query-string builder. They hold no opinion about
- * response shapes, selection state, or caching; that stays with the caller.
+ * a debounced scheduler, stale-request aborting, sequence guarding, and a
+ * query-string builder. They hold no opinion about response shapes, selection
+ * state, or caching; that stays with the caller.
  */
 
 /**
@@ -132,83 +132,4 @@ export function createRequestRunner(): RequestRunner {
             return sequence === latest && sequence > 0 && controller !== null
         },
     }
-}
-
-/** Error thrown by {@link fetchJson} when the response status is not ok. */
-export class HttpError extends Error {
-    readonly status: number
-    readonly response: Response
-
-    constructor(response: Response) {
-        super(`Request failed with status ${response.status}`)
-        this.name = 'HttpError'
-        this.status = response.status
-        this.response = response
-    }
-}
-
-/** Options for {@link fetchJson}. Extends `RequestInit`; `headers` merges over the defaults. */
-export interface FetchJsonOptions extends Omit<RequestInit, 'headers'> {
-    headers?: Record<string, string>
-}
-
-/**
- * Fetch a URL and parse the JSON body.
- *
- * Sends `Accept: application/json` and `X-Requested-With: XMLHttpRequest` by
- * default (override or extend via `options.headers`). Throws {@link HttpError}
- * on a non-ok status.
- */
-export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T> {
-    const { headers, ...rest } = options
-
-    const response = await fetch(url, {
-        ...rest,
-        headers: {
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            ...headers,
-        },
-    })
-
-    if (!response.ok) {
-        throw new HttpError(response)
-    }
-
-    return response.json() as Promise<T>
-}
-
-/** A value assignable to a query parameter. Arrays append repeated keys. */
-export type QueryValue = string | number | boolean | null | undefined | ReadonlyArray<string | number | boolean>
-
-/**
- * Build an absolute URL from a base and a bag of query parameters.
- *
- * Scalars are set, arrays append the key once per item, and `null`/`undefined`
- * values are skipped. A relative `base` resolves against `origin` (defaulting
- * to `window.location.origin` in the browser).
- *
- * @param base - Absolute or relative URL.
- * @param params - Query parameters to append.
- * @param origin - Base origin for a relative `base`.
- */
-export function buildUrl(base: string, params: Record<string, QueryValue> = {}, origin?: string): string {
-    const resolvedOrigin = origin ?? (typeof window !== 'undefined' ? window.location.origin : undefined)
-    const url = new URL(base, resolvedOrigin)
-
-    for (const [key, value] of Object.entries(params)) {
-        if (value === null || value === undefined) {
-            continue
-        }
-
-        if (Array.isArray(value)) {
-            for (const item of value) {
-                url.searchParams.append(key, String(item))
-            }
-        } else {
-            url.searchParams.set(key, String(value as string | number | boolean))
-        }
-    }
-
-    return url.toString()
 }

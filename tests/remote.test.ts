@@ -1,4 +1,4 @@
-import { createDebouncer, createRequestRunner, fetchJson, buildUrl, HttpError } from '../src/remote'
+import { createDebouncer, createRequestRunner } from '../src/remote'
 
 describe('createDebouncer', () => {
     beforeEach(() => vi.useFakeTimers())
@@ -113,78 +113,5 @@ describe('createRequestRunner', () => {
             throw error
         })
         expect(result).toEqual({ status: 'error', error })
-    })
-})
-
-describe('fetchJson', () => {
-    afterEach(() => vi.restoreAllMocks())
-
-    it('sends JSON headers and returns the parsed body', async () => {
-        const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
-        vi.stubGlobal('fetch', fetchMock)
-
-        const data = await fetchJson<{ ok: boolean }>('https://example.com/api')
-
-        expect(data).toEqual({ ok: true })
-        const headers = fetchMock.mock.calls[0][1].headers
-        expect(headers.Accept).toBe('application/json')
-        expect(headers['X-Requested-With']).toBe('XMLHttpRequest')
-    })
-
-    it('merges and overrides headers, forwards other init', async () => {
-        const fetchMock = vi.fn(async () => new Response('[]', { status: 200 }))
-        vi.stubGlobal('fetch', fetchMock)
-
-        const signal = new AbortController().signal
-        await fetchJson('https://example.com/api', {
-            signal,
-            headers: { Accept: 'application/vnd.api+json', 'X-Custom': '1' },
-        })
-
-        const init = fetchMock.mock.calls[0][1]
-        expect(init.signal).toBe(signal)
-        expect(init.headers.Accept).toBe('application/vnd.api+json')
-        expect(init.headers['X-Custom']).toBe('1')
-        expect(init.headers['X-Requested-With']).toBe('XMLHttpRequest')
-    })
-
-    it('throws HttpError on a non-ok status', async () => {
-        const fetchMock = vi.fn(async () => new Response('nope', { status: 404 }))
-        vi.stubGlobal('fetch', fetchMock)
-
-        await expect(fetchJson('https://example.com/missing')).rejects.toMatchObject({
-            name: 'HttpError',
-            status: 404,
-        })
-    })
-})
-
-describe('buildUrl', () => {
-    it('sets scalar params and skips null/undefined', () => {
-        const url = buildUrl('https://example.com/search', {
-            q: 'term',
-            page: 2,
-            active: true,
-            empty: null,
-            missing: undefined,
-        })
-
-        const parsed = new URL(url)
-        expect(parsed.searchParams.get('q')).toBe('term')
-        expect(parsed.searchParams.get('page')).toBe('2')
-        expect(parsed.searchParams.get('active')).toBe('true')
-        expect(parsed.searchParams.has('empty')).toBe(false)
-        expect(parsed.searchParams.has('missing')).toBe(false)
-    })
-
-    it('appends arrays as repeated keys', () => {
-        const url = buildUrl('https://example.com/search', { 'ids[]': [1, 2, 3] })
-        const parsed = new URL(url)
-        expect(parsed.searchParams.getAll('ids[]')).toEqual(['1', '2', '3'])
-    })
-
-    it('resolves a relative base against the provided origin', () => {
-        const url = buildUrl('/search', { q: 'x' }, 'https://example.test')
-        expect(url).toBe('https://example.test/search?q=x')
     })
 })

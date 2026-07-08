@@ -9,11 +9,13 @@
             .reorder-list {
                 list-style: none;
                 margin: 0;
-                padding: 0;
+                padding: 12px;
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
                 max-width: 320px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
             }
 
             .reorder-item {
@@ -40,6 +42,19 @@
                 touch-action: none;
                 user-select: none;
                 font-weight: bold;
+            }
+
+            .scroll-box {
+                width: 320px;
+                height: 150px;
+                overflow: auto;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+            }
+
+            .scroll-box .reorder-list {
+                border: 0;
+                min-height: 520px;
             }
         </style>
     </head>
@@ -70,28 +85,113 @@
             </div>
         </section>
 
+        <section>
+            <h2>Stable pointer capture</h2>
+            <button id="stable-handle" class="reorder-handle" type="button">drag stable handle</button>
+            <span class="status"
+                ><span class="label">Stable dragging:</span>
+                <span class="value" id="stable-dragging-value">no</span></span
+            >
+        </section>
+
+        <section>
+            <h2>Nested handle</h2>
+            <div id="nested-row" class="reorder-item" style="max-width: 320px">
+                <button id="nested-handle" class="reorder-handle" type="button">
+                    <span id="nested-icon">drag nested</span>
+                </button>
+                <span>Listener is attached to the row</span>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Nested dragging:</span>
+                    <span class="value" id="nested-dragging-value">no</span></span
+                >
+            </div>
+        </section>
+
+        <section>
+            <h2>Auto-scroll reorder</h2>
+            <div id="auto-scroll-box" class="scroll-box">
+                <ul id="auto-scroll-list" class="reorder-list"></ul>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Scroll top:</span> <span class="value" id="auto-scroll-top">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Scroll frames:</span>
+                    <span class="value" id="auto-scroll-frames">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Measurements:</span>
+                    <span class="value" id="auto-scroll-measures">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Auto dragging:</span>
+                    <span class="value" id="auto-scroll-dragging">no</span></span
+                >
+            </div>
+        </section>
+
         <script type="module">
             import {
+                createAutoScroller,
                 createPointerReorder,
+                findReorderHandle,
+                getClosestHitBoxByCenter,
+                getDirectionBiasedHitBox,
+                getHitBoxCenter,
                 getInsertionIndexFromPoint,
+                getIntersectingHitBox,
                 moveArrayItem,
+                pointerIntersectsHitBox,
                 REORDERABLE_LIST_HANDLE_ATTRIBUTE,
                 resolveTargetIndexFromInsertion,
             } from '../../src/reorder.ts'
 
             // Exposed for pure-function unit tests via page.evaluate.
-            window.reorder = { moveArrayItem, getInsertionIndexFromPoint, resolveTargetIndexFromInsertion }
+            window.reorder = {
+                createAutoScroller,
+                findReorderHandle,
+                getClosestHitBoxByCenter,
+                getDirectionBiasedHitBox,
+                getHitBoxCenter,
+                getInsertionIndexFromPoint,
+                getIntersectingHitBox,
+                moveArrayItem,
+                pointerIntersectsHitBox,
+                resolveTargetIndexFromInsertion,
+            }
+            window.reorderLastPointerId = null
+            window.reorderStablePointerId = null
 
             let items = ['Apple', 'Banana', 'Cherry', 'Date']
+            let autoScrollItems = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel']
 
             const listEl = document.getElementById('list')
             const orderValue = document.getElementById('order-value')
             const draggingValue = document.getElementById('dragging-value')
             const targetValue = document.getElementById('target-value')
             const moveValue = document.getElementById('move-value')
+            const stableHandle = document.getElementById('stable-handle')
+            const stableDraggingValue = document.getElementById('stable-dragging-value')
+            const nestedRow = document.getElementById('nested-row')
+            const nestedHandle = document.getElementById('nested-handle')
+            const nestedDraggingValue = document.getElementById('nested-dragging-value')
+            const autoScrollBox = document.getElementById('auto-scroll-box')
+            const autoScrollList = document.getElementById('auto-scroll-list')
+            const autoScrollTop = document.getElementById('auto-scroll-top')
+            const autoScrollFrames = document.getElementById('auto-scroll-frames')
+            const autoScrollMeasures = document.getElementById('auto-scroll-measures')
+            const autoScrollDragging = document.getElementById('auto-scroll-dragging')
 
             const itemElements = new Map()
+            const autoScrollItemElements = new Map()
             let state = { draggedIndex: null, insertionIndex: null, targetIndex: null }
+            let autoScrollState = { draggedIndex: null, insertionIndex: null, targetIndex: null }
+            let autoScrollFrameCount = 0
+            let autoScrollMeasureCount = 0
 
             const controller = createPointerReorder({
                 getItemCount: () => items.length,
@@ -104,6 +204,10 @@
                             return { index, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
                         })
                         .filter(Boolean),
+                getBounds: () => {
+                    const rect = listEl.getBoundingClientRect()
+                    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                },
                 onChange: (next) => {
                     state = next
                     render()
@@ -113,6 +217,81 @@
                     moveValue.textContent = `${source}: ${fromIndex} -> ${toIndex}`
                     render()
                 },
+            })
+
+            const stableController = createPointerReorder({
+                getItemCount: () => 2,
+                getHitBoxes: () => [
+                    { index: 0, left: 0, top: 0, right: 100, bottom: 50 },
+                    { index: 1, left: 0, top: 50, right: 100, bottom: 100 },
+                ],
+                onChange: () => {
+                    stableDraggingValue.textContent = stableController.isDragging() ? 'yes' : 'no'
+                },
+                onCommit: () => {},
+            })
+
+            const nestedController = createPointerReorder({
+                getItemCount: () => 2,
+                getHitBoxes: () => [
+                    { index: 0, left: 0, top: 0, right: 100, bottom: 50 },
+                    { index: 1, left: 0, top: 50, right: 100, bottom: 100 },
+                ],
+                onChange: () => {
+                    nestedDraggingValue.textContent = nestedController.isDragging() ? 'yes' : 'no'
+                },
+                onCommit: () => {},
+            })
+
+            const autoScrollController = createPointerReorder({
+                getItemCount: () => autoScrollItems.length,
+                getHitBoxes: () => {
+                    autoScrollMeasureCount++
+                    autoScrollMeasures.textContent = String(autoScrollMeasureCount)
+
+                    return autoScrollItems
+                        .map((_, index) => {
+                            const el = autoScrollItemElements.get(index)
+                            if (!el) return null
+                            const rect = el.getBoundingClientRect()
+                            return { index, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                        })
+                        .filter(Boolean)
+                },
+                getBounds: () => {
+                    const rect = autoScrollBox.getBoundingClientRect()
+                    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                },
+                autoScroll: {
+                    edgeThreshold: 52,
+                    maxSpeed: 900,
+                    axis: 'y',
+                    getScrollContainers: () => [autoScrollBox],
+                    onScroll: () => {
+                        autoScrollFrameCount++
+                        autoScrollFrames.textContent = String(autoScrollFrameCount)
+                        autoScrollTop.textContent = String(Math.round(autoScrollBox.scrollTop))
+                    },
+                },
+                onChange: (next) => {
+                    autoScrollState = next
+                    renderAutoScroll()
+                },
+                onCommit: (fromIndex, toIndex) => {
+                    autoScrollItems = moveArrayItem(autoScrollItems, fromIndex, toIndex)
+                    renderAutoScroll()
+                },
+            })
+
+            stableHandle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            stableHandle.addEventListener('pointerdown', (event) => {
+                window.reorderStablePointerId = event.pointerId
+                stableController.pointerDown(0, event)
+            })
+
+            nestedHandle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            nestedRow.addEventListener('pointerdown', (event) => {
+                nestedController.pointerDown(0, event)
             })
 
             function moveByKeyboard(index, direction) {
@@ -145,7 +324,10 @@
                     handle.id = `handle-${index}`
                     handle.textContent = 'drag'
                     handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
-                    handle.addEventListener('pointerdown', (event) => controller.pointerDown(index, event))
+                    handle.addEventListener('pointerdown', (event) => {
+                        window.reorderLastPointerId = event.pointerId
+                        controller.pointerDown(index, event)
+                    })
 
                     const text = document.createElement('span')
                     text.textContent = label
@@ -170,7 +352,40 @@
                 }
             }
 
+            function renderAutoScroll() {
+                autoScrollTop.textContent = String(Math.round(autoScrollBox.scrollTop))
+                autoScrollFrames.textContent = String(autoScrollFrameCount)
+                autoScrollDragging.textContent = autoScrollController.isDragging() ? 'yes' : 'no'
+                autoScrollList.innerHTML = ''
+                autoScrollItemElements.clear()
+
+                autoScrollItems.forEach((label, index) => {
+                    const li = document.createElement('li')
+                    li.className = 'reorder-item'
+                    li.id = `auto-item-${index}`
+                    if (index === autoScrollState.draggedIndex) li.classList.add('dragged')
+                    if (index === autoScrollState.targetIndex) li.classList.add('target')
+
+                    const handle = document.createElement('span')
+                    handle.className = 'reorder-handle'
+                    handle.id = `auto-handle-${index}`
+                    handle.textContent = 'drag'
+                    handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+                    handle.addEventListener('pointerdown', (event) => {
+                        autoScrollController.pointerDown(index, event)
+                    })
+
+                    const text = document.createElement('span')
+                    text.textContent = label
+
+                    li.append(handle, text)
+                    autoScrollItemElements.set(index, li)
+                    autoScrollList.appendChild(li)
+                })
+            }
+
             render()
+            renderAutoScroll()
         </script>
     </body>
 </html>

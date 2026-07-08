@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Focus</title>
+        <link rel="stylesheet" href="shared.css" />
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Focus</h1>
+        <p class="page-desc">Focus the first enabled control from a candidate list.</p>
+
+        <section>
+            <h2>First enabled element</h2>
+            <div class="btn-row">
+                <button id="disabled-first" disabled>Disabled first</button>
+                <button id="enabled-second">Enabled second</button>
+                <button id="enabled-third">Enabled third</button>
+            </div>
+            <div class="btn-row">
+                <button id="focus-enabled-btn">Focus first enabled</button>
+                <button id="focus-none-btn">Try disabled only</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Result:</span> <span class="value" id="focus-result">none</span></span
+                >
+                <span class="status"
+                    ><span class="label">Active:</span> <span class="value" id="active-id">none</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import { focusFirstEnabledElement } from '../../src/index.ts'
+
+            const disabledFirst = document.getElementById('disabled-first')
+            const enabledSecond = document.getElementById('enabled-second')
+            const enabledThird = document.getElementById('enabled-third')
+            const focusResult = document.getElementById('focus-result')
+            const activeId = document.getElementById('active-id')
+
+            function update(result) {
+                focusResult.textContent = String(result)
+                activeId.textContent = document.activeElement?.id || 'none'
+            }
+
+            document.getElementById('focus-enabled-btn').addEventListener('click', () => {
+                update(focusFirstEnabledElement([null, disabledFirst, enabledSecond, enabledThird]))
+            })
+
+            document.getElementById('focus-none-btn').addEventListener('click', () => {
+                enabledSecond.blur()
+                update(focusFirstEnabledElement([null, undefined, disabledFirst]))
+            })
+        </script>
+    </body>
+</html>

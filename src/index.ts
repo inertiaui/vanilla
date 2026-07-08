@@ -11,7 +11,7 @@ export {
 export { easings, animate, cancelAnimations } from './animate'
 export type { EasingName, AnimateOptions } from './animate'
 
-export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden } from './dialog'
+export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden, markInert } from './dialog'
 export type { CleanupFunction, FocusTrapOptions, EscapeKeyOptions } from './dialog'
 
 export { onClickOutside } from './clickOutside'
@@ -31,29 +31,56 @@ export type {
 } from './listbox'
 
 export {
+    createAutoScroller,
     createPointerReorder,
+    findReorderHandle,
+    getClosestHitBoxByCenter,
+    getDirectionBiasedHitBox,
+    getHitBoxCenter,
+    getIntersectingHitBox,
     getInsertionIndexFromPoint,
     isReorderHandle,
     moveArrayItem,
+    pointerIntersectsHitBox,
     REORDERABLE_LIST_HANDLE_ATTRIBUTE,
     resolveTargetIndexFromInsertion,
 } from './reorder'
 export type {
+    AutoScrollAxis,
+    AutoScrollContainer,
+    AutoScrollerController,
+    AutoScrollerOptions,
+    ClosestReorderHitBoxOptions,
     PointerReorderController,
     PointerReorderOptions,
     PointerReorderState,
+    ReorderBounds,
+    ReorderCollisionDirection,
     ReorderDirection,
     ReorderHitBox,
+    ReorderInsertionOptions,
     ReorderMove,
     ReorderPoint,
     ReorderSource,
 } from './reorder'
 
-export { buildUrl, createDebouncer, createRequestRunner, fetchJson, HttpError } from './remote'
-export type { Debouncer, FetchJsonOptions, QueryValue, RequestResult, RequestRunner } from './remote'
+export { createDebouncer, createRequestRunner } from './remote'
+export type { Debouncer, RequestResult, RequestRunner } from './remote'
+
+export { focusFirstEnabledElement } from './focus'
+
+export { createNativePopoverDisclosure } from './nativePopover'
+export type {
+    NativePopoverCloseOptions,
+    NativePopoverDisclosureController,
+    NativePopoverDisclosureOptions,
+    NativePopoverOpenOptions,
+    NativePopoverToggleOptions,
+} from './nativePopover'
 
 export {
     supportsAnchorPositioning,
+    supportsTopLayerAnchorPositioning,
     computePosition,
     autoUpdate,
     positionTopLayerPopover,

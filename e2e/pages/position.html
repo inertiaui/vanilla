@@ -50,6 +50,9 @@
             <div class="btn-row">
                 <button id="pos-top-layer">popover</button>
                 <button id="pos-top-layer-flip">popover flip</button>
+                <button id="pos-top-layer-offset">popover offset</button>
+                <button id="pos-top-layer-no-flip">popover no flip</button>
+                <button id="pos-top-layer-manual">popover manual</button>
                 <button id="start-top-layer-auto-btn">Start auto</button>
                 <button id="stop-top-layer-auto-btn">Stop auto</button>
             </div>
@@ -111,6 +114,7 @@
                 autoUpdate,
                 positionTopLayerPopover,
                 autoUpdateTopLayerPopover,
+                supportsTopLayerAnchorPositioning,
             } from '../../src/index.ts'
 
             const reference = document.getElementById('reference')
@@ -132,6 +136,8 @@
             let topLayerAutoCleanup = null
             let updateCount = 0
             let topLayerUpdateCount = 0
+
+            window.supportsTopLayerAnchorPositioning = supportsTopLayerAnchorPositioning
 
             function showResult(result) {
                 floating.style.display = 'block'
@@ -262,6 +268,35 @@
                     placement: 'bottom-start',
                     matchReferenceWidth: true,
                     viewportMargin: 8,
+                })
+            })
+
+            document.getElementById('pos-top-layer-offset').addEventListener('click', () => {
+                showTopLayer(referenceWide, {
+                    placement: 'bottom-start',
+                    offset: 12,
+                    matchReferenceWidth: false,
+                    viewportMargin: 16,
+                    anchorPositioning: false,
+                })
+            })
+
+            document.getElementById('pos-top-layer-no-flip').addEventListener('click', () => {
+                showTopLayer(referenceBottom, {
+                    placement: 'bottom-start',
+                    flip: false,
+                    matchReferenceWidth: false,
+                    viewportMargin: 8,
+                    anchorPositioning: false,
+                })
+            })
+
+            document.getElementById('pos-top-layer-manual').addEventListener('click', () => {
+                showTopLayer(referenceWide, {
+                    placement: 'bottom-start',
+                    matchReferenceWidth: true,
+                    viewportMargin: 8,
+                    anchorPositioning: false,
                 })
             })
 
