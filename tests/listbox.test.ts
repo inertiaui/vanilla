@@ -1,28 +1,4 @@
-import { createFocusOutDismiss, findEnabledListboxIndex, resolveListboxNavigation } from '../src/listbox'
-
-describe('findEnabledListboxIndex', () => {
-    const items = [{ label: 'Alpha' }, { label: 'Beta', disabled: true }, { label: 'Gamma' }]
-
-    const disabled = (item: (typeof items)[number]) => item.disabled === true
-
-    it('finds the next enabled item in the requested direction', () => {
-        expect(findEnabledListboxIndex({ items, startIndex: 0, direction: 1, isItemDisabled: disabled })).toBe(0)
-        expect(findEnabledListboxIndex({ items, startIndex: 1, direction: 1, isItemDisabled: disabled })).toBe(2)
-        expect(findEnabledListboxIndex({ items, startIndex: 1, direction: -1, isItemDisabled: disabled })).toBe(0)
-    })
-
-    it('returns the fallback when no enabled item is reachable', () => {
-        expect(
-            findEnabledListboxIndex({
-                items: items.map((item) => ({ ...item, disabled: true })),
-                startIndex: 0,
-                direction: 1,
-                isItemDisabled: disabled,
-                fallbackIndex: 7,
-            }),
-        ).toBe(7)
-    })
-})
+import { createFocusOutDismiss, resolveListboxNavigation } from '../src/listbox'
 
 describe('resolveListboxNavigation', () => {
     const items = [{ label: 'Alpha' }, { label: 'Beta', disabled: true }, { label: 'Gamma' }]
@@ -54,6 +30,21 @@ describe('resolveListboxNavigation', () => {
         expect(resolveListboxNavigation({ items, currentIndex: 1, key: 'Enter', isItemDisabled: disabled })).toEqual({
             handled: false,
             index: 1,
+        })
+    })
+
+    it('returns the fallback when no enabled item is reachable', () => {
+        expect(
+            resolveListboxNavigation({
+                items: items.map((item) => ({ ...item, disabled: true })),
+                currentIndex: -1,
+                key: 'ArrowDown',
+                isItemDisabled: disabled,
+                fallbackIndex: 7,
+            }),
+        ).toEqual({
+            handled: true,
+            index: 7,
         })
     })
 })

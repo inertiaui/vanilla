@@ -9,21 +9,22 @@ export const REORDERABLE_LIST_HANDLE_ATTRIBUTE = 'data-reorderable-list-handle'
 export type ReorderDirection = 'up' | 'down'
 export type ReorderSource = 'keyboard' | 'pointer'
 
-export type ReorderPoint = {
+type ReorderPoint = {
     clientX: number
     clientY: number
 }
 
-export type ReorderHitBox = {
+type ReorderHitBox = ReorderBounds & {
     index: number
+}
+
+export type ReorderBounds = {
     left: number
     top: number
     right: number
     bottom: number
 }
 
-export type ReorderBounds = Pick<ReorderHitBox, 'left' | 'top' | 'right' | 'bottom'>
-export type ReorderCollisionDirection = 'up' | 'down' | 'left' | 'right'
 export type AutoScrollAxis = 'x' | 'y' | 'both'
 export type AutoScrollContainer = Element | Window
 
@@ -32,16 +33,6 @@ export type ReorderMove<T> = {
     fromIndex: number
     toIndex: number
     source: ReorderSource
-}
-
-export interface ClosestReorderHitBoxOptions {
-    /**
-     * Prefer hit boxes whose center is in this direction from the pointer while
-     * still falling back to the closest opposite-side hit box when needed.
-     */
-    direction?: ReorderCollisionDirection
-    /** Multiplier applied to hit boxes outside the preferred direction. */
-    oppositeDirectionPenalty?: number
 }
 
 export interface AutoScrollerOptions {
@@ -57,7 +48,7 @@ export interface AutoScrollerOptions {
     onScroll?: () => void
 }
 
-export interface AutoScrollerController {
+interface AutoScrollerController {
     /** Update the latest pointer position and optional element used to find scroll ancestors. */
     update: (point: ReorderPoint, element?: Element | null) => void
     /** Stop any pending auto-scroll frame without disabling future updates. */
@@ -68,7 +59,7 @@ export interface AutoScrollerController {
     isScrolling: () => boolean
 }
 
-export interface ReorderInsertionOptions {
+interface ReorderInsertionOptions {
     /**
      * Optional outer hit area for list chrome around the items, such as table
      * headers or empty padding. Item midpoint math still uses the item boxes.
@@ -76,11 +67,72 @@ export interface ReorderInsertionOptions {
     bounds?: ReorderBounds | null
 }
 
+export type ReorderPreviewItem<T> = {
+    item: T
+    /** Index in the source item array. */
+    index: number
+    /** Index where the item is currently previewed visually. */
+    visualIndex: number
+}
+
+export type ReorderableListState = {
+    draggedIndex: number | null
+    insertionIndex: number | null
+    targetIndex: number | null
+}
+
+export type ReorderCommitContext = {
+    /**
+     * True when a pointer reorder already animated to the committed target
+     * while dragging. Consumers can use this to avoid replaying the same
+     * reorder animation on release.
+     */
+    alreadyPreviewed: boolean
+}
+
+export interface ReorderableListOptions<T> {
+    /** Return the current ordered items. */
+    getItems: () => readonly T[]
+    /** Optional writer used by `moveItem` and pointer commits. */
+    setItems?: (items: T[]) => void
+    /** Optional guard; reordering is skipped when it returns false. Defaults to true. */
+    canReorder?: () => boolean
+    /** Optional outer collision bounds. Defaults to the registered list element rect. */
+    getBounds?: () => ReorderBounds | null
+    /** Optional edge auto-scroll while pointer-dragging. Disabled by default. */
+    autoScroll?: boolean | AutoScrollerOptions
+    /** Called whenever pointer drag state changes. */
+    onChange?: (state: ReorderableListState) => void
+    /** Called immediately before items are written or `onReorder` fires. */
+    onBeforeReorder?: (move: ReorderMove<T>, context: ReorderCommitContext) => void
+    /** Called after a valid keyboard or pointer reorder. */
+    onReorder?: (move: ReorderMove<T>, context: ReorderCommitContext) => void
+}
+
+export interface ReorderableListController<T> {
+    /** Register the outer list element used for default bounds and auto-scroll ancestry. */
+    setListElement: (element: HTMLElement | null | undefined) => void
+    /** Register or unregister an item element by source index. */
+    setItemElement: (index: number, element: HTMLElement | null | undefined) => void
+    /** Current registered item elements ordered by index. */
+    getItemElements: () => HTMLElement[]
+    /** Source indices in the order they should render for the live pointer preview. */
+    getPreviewOrder: () => number[]
+    /** Current items plus source and visual indices for the live pointer preview. */
+    getPreviewItems: () => ReorderPreviewItem<T>[]
+    /** Commit an up/down keyboard reorder. */
+    moveItem: (index: number, direction: ReorderDirection) => ReorderMove<T> | null
+    /** Begin a pointer reorder from a registered handle event. */
+    pointerDown: (index: number, event: PointerEvent) => void
+    /** Cancel active pointer work and remove global listeners. Idempotent. */
+    cleanup: CleanupFunction
+}
+
 /**
  * Return a new array with the item at `fromIndex` moved to `toIndex`.
  * Out-of-range or no-op moves return a shallow copy unchanged.
  */
-export function moveArrayItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
+function moveArrayItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T[] {
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
         return [...items]
     }
@@ -91,6 +143,14 @@ export function moveArrayItem<T>(items: readonly T[], fromIndex: number, toIndex
     nextItems.splice(toIndex, 0, item as T)
 
     return nextItems
+}
+
+function identityOrder(length: number): number[] {
+    return Array.from({ length }, (_, index) => index)
+}
+
+function isHTMLElement(value: unknown): value is HTMLElement {
+    return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement
 }
 
 function getValidReorderHitBoxes(hitBoxes: readonly ReorderHitBox[]): ReorderHitBox[] {
@@ -111,103 +171,12 @@ function getOrderedReorderHitBoxes(hitBoxes: readonly ReorderHitBox[]): ReorderH
 }
 
 /**
- * Return true when the pointer is inside the hit box bounds.
- */
-export function pointerIntersectsHitBox(hitBox: ReorderHitBox, point: ReorderPoint): boolean {
-    return (
-        Number.isFinite(point.clientX) &&
-        Number.isFinite(point.clientY) &&
-        point.clientX >= hitBox.left &&
-        point.clientX <= hitBox.right &&
-        point.clientY >= hitBox.top &&
-        point.clientY <= hitBox.bottom
-    )
-}
-
-/**
- * Resolve the visual center point for a hit box.
- */
-export function getHitBoxCenter(hitBox: ReorderHitBox): ReorderPoint {
-    return {
-        clientX: hitBox.left + (hitBox.right - hitBox.left) / 2,
-        clientY: hitBox.top + (hitBox.bottom - hitBox.top) / 2,
-    }
-}
-
-/**
- * Return the first hit box intersecting the pointer, ordered by item index.
- */
-export function getIntersectingHitBox(hitBoxes: readonly ReorderHitBox[], point: ReorderPoint): ReorderHitBox | null {
-    return getOrderedReorderHitBoxes(hitBoxes).find((hitBox) => pointerIntersectsHitBox(hitBox, point)) ?? null
-}
-
-function distanceSquared(first: ReorderPoint, second: ReorderPoint): number {
-    return (first.clientX - second.clientX) ** 2 + (first.clientY - second.clientY) ** 2
-}
-
-function isPointInDirection(point: ReorderPoint, origin: ReorderPoint, direction: ReorderCollisionDirection): boolean {
-    if (direction === 'up') {
-        return point.clientY < origin.clientY
-    }
-
-    if (direction === 'down') {
-        return point.clientY > origin.clientY
-    }
-
-    if (direction === 'left') {
-        return point.clientX < origin.clientX
-    }
-
-    return point.clientX > origin.clientX
-}
-
-/**
- * Return the hit box whose center is closest to the pointer. When a direction
- * is provided, opposite-side candidates are penalized instead of discarded.
- */
-export function getClosestHitBoxByCenter(
-    hitBoxes: readonly ReorderHitBox[],
-    point: ReorderPoint,
-    options: ClosestReorderHitBoxOptions = {},
-): ReorderHitBox | null {
-    const penalty = Math.max(1, options.oppositeDirectionPenalty ?? 4)
-    let closestHitBox: ReorderHitBox | null = null
-    let closestScore = Number.POSITIVE_INFINITY
-
-    for (const hitBox of getValidReorderHitBoxes(hitBoxes)) {
-        const center = getHitBoxCenter(hitBox)
-        const directionPenalty =
-            options.direction && !isPointInDirection(center, point, options.direction) ? penalty : 1
-        const score = distanceSquared(center, point) * directionPenalty
-
-        if (score < closestScore || (score === closestScore && closestHitBox && hitBox.index < closestHitBox.index)) {
-            closestHitBox = hitBox
-            closestScore = score
-        }
-    }
-
-    return closestHitBox
-}
-
-/**
- * Direction-biased closest-center helper for complex list/grid collision models.
- */
-export function getDirectionBiasedHitBox(
-    hitBoxes: readonly ReorderHitBox[],
-    point: ReorderPoint,
-    direction: ReorderCollisionDirection,
-    options: Omit<ClosestReorderHitBoxOptions, 'direction'> = {},
-): ReorderHitBox | null {
-    return getClosestHitBoxByCenter(hitBoxes, point, { ...options, direction })
-}
-
-/**
  * Given the on-screen hit boxes of each item and a pointer position, resolve the
  * insertion index (0..count) the pointer currently maps to, or `null` when the
  * point falls outside the combined bounds. Handles both single-column (vertical
  * midpoint) and multi-item rows (horizontal midpoint) layouts.
  */
-export function getInsertionIndexFromPoint(
+function getInsertionIndexFromPoint(
     hitBoxes: readonly ReorderHitBox[],
     point: ReorderPoint,
     options: ReorderInsertionOptions = {},
@@ -278,7 +247,7 @@ export function getInsertionIndexFromPoint(
  * no-op or out of range. Because removing the dragged item shifts everything
  * after it left by one, an insertion index past `fromIndex` maps to `index - 1`.
  */
-export function resolveTargetIndexFromInsertion(
+function resolveTargetIndexFromInsertion(
     fromIndex: number,
     insertionIndex: number | null,
     itemCount: number,
@@ -301,7 +270,7 @@ export function resolveTargetIndexFromInsertion(
  * Return true when the event target is a reorder handle carrying
  * `REORDERABLE_LIST_HANDLE_ATTRIBUTE="true"`.
  */
-export function isReorderHandle(target: EventTarget | null): target is HTMLElement {
+function isReorderHandle(target: EventTarget | null): target is HTMLElement {
     return target instanceof HTMLElement && target.getAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE) === 'true'
 }
 
@@ -343,10 +312,7 @@ function getFallbackEventPath(event: Event): EventTarget[] {
  * Find the reorder handle in an event path. This supports nested handle content
  * and shadow-dom retargeting while preserving the same handle attribute contract.
  */
-export function findReorderHandle(
-    event: Event,
-    boundary: EventTarget | null = event.currentTarget,
-): HTMLElement | null {
+function findReorderHandle(event: Event, boundary: EventTarget | null = event.currentTarget): HTMLElement | null {
     const path = typeof event.composedPath === 'function' ? event.composedPath() : getFallbackEventPath(event)
 
     for (const target of path) {
@@ -527,7 +493,7 @@ function scrollContainer(container: AutoScrollContainer, left: number, top: numb
 /**
  * Create a transform-free pointer auto-scroller for drag interactions.
  */
-export function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerController {
+function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerController {
     const edgeThreshold = finiteNumber(options.edgeThreshold, autoScrollDefaults.edgeThreshold)
     const maxSpeed = finiteNumber(options.maxSpeed, autoScrollDefaults.maxSpeed)
     const axis = options.axis ?? autoScrollDefaults.axis
@@ -636,7 +602,7 @@ export function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrol
     }
 }
 
-export interface PointerReorderOptions {
+interface PointerReorderOptions {
     /**
      * Return the current hit boxes for every reorderable item. Called on each
      * pointer move and auto-scroll frame so callers can measure fresh
@@ -657,13 +623,9 @@ export interface PointerReorderOptions {
     onCommit: (fromIndex: number, toIndex: number, source: 'pointer') => void
 }
 
-export type PointerReorderState = {
-    draggedIndex: number | null
-    insertionIndex: number | null
-    targetIndex: number | null
-}
+type PointerReorderState = ReorderableListState
 
-export interface PointerReorderController {
+interface PointerReorderController {
     /**
      * Begin a pointer reorder from `index`. Pass the originating `pointerdown`
      * event; the interaction is ignored unless it is a primary left-button press
@@ -684,13 +646,192 @@ const idleState: PointerReorderState = {
     targetIndex: null,
 }
 
+function defaultReorderableListBounds(element: HTMLElement | null): ReorderBounds | null {
+    const rect = element?.getBoundingClientRect()
+
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return null
+    }
+
+    return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+    }
+}
+
+function getRegisteredItemElements(itemElements: Map<number, HTMLElement>): HTMLElement[] {
+    return Array.from(itemElements.entries())
+        .sort(([firstIndex], [secondIndex]) => firstIndex - secondIndex)
+        .map(([, element]) => element)
+}
+
 /**
- * Framework-neutral pointer-drag reorder controller. It owns the window
- * pointer listeners and insertion-index math; the caller supplies hit boxes and
- * receives state updates plus a single commit callback. Keyboard reordering is
- * intentionally left to the caller; it is a one-line `moveArrayItem` call.
+ * Framework-neutral list reorder controller. It combines item registration,
+ * live pointer preview ordering, keyboard moves, pointer commits, bounds, and
+ * cleanup while leaving rendering, announcements, and animation policy to the
+ * consuming package.
  */
-export function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
+export function createReorderableList<T>(options: ReorderableListOptions<T>): ReorderableListController<T> {
+    let listElement: HTMLElement | null = null
+    let pointerState: ReorderableListState = idleState
+    let dragHitBoxes: ReorderHitBox[] | null = null
+    let lastPreviewedPointerTargetIndex: number | null = null
+    const itemElements = new Map<number, HTMLElement>()
+
+    const itemCount = () => options.getItems().length
+    const canReorder = () => (options.canReorder?.() ?? true) && itemCount() > 1
+    const getBounds = () => options.getBounds?.() ?? defaultReorderableListBounds(listElement)
+
+    const measureItemHitBoxes = (): ReorderHitBox[] => {
+        return options
+            .getItems()
+            .map((_, index) => {
+                const element = itemElements.get(index)
+
+                if (!element) {
+                    return null
+                }
+
+                const rect = element.getBoundingClientRect()
+
+                return {
+                    index,
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                }
+            })
+            .filter((hitBox): hitBox is ReorderHitBox => hitBox !== null)
+    }
+
+    const getHitBoxes = () => dragHitBoxes ?? measureItemHitBoxes()
+
+    const commitReorder = (
+        fromIndex: number,
+        toIndex: number,
+        source: ReorderSource,
+        context: ReorderCommitContext,
+    ): ReorderMove<T> | null => {
+        const items = options.getItems()
+
+        if (
+            !canReorder() ||
+            fromIndex === toIndex ||
+            fromIndex < 0 ||
+            toIndex < 0 ||
+            fromIndex >= items.length ||
+            toIndex >= items.length
+        ) {
+            return null
+        }
+
+        const move: ReorderMove<T> = {
+            item: items[fromIndex] as T,
+            fromIndex,
+            toIndex,
+            source,
+        }
+
+        options.onBeforeReorder?.(move, context)
+        options.setItems?.(moveArrayItem(items, fromIndex, toIndex))
+        options.onReorder?.(move, context)
+
+        return move
+    }
+
+    const pointerReorder = createPointerReorder({
+        getItemCount: itemCount,
+        getHitBoxes,
+        getBounds,
+        canReorder,
+        autoScroll: options.autoScroll ?? false,
+        onChange: (state) => {
+            if (state.draggedIndex !== null) {
+                lastPreviewedPointerTargetIndex = state.targetIndex
+            }
+
+            pointerState = state
+            options.onChange?.(state)
+
+            if (state.draggedIndex === null) {
+                dragHitBoxes = null
+            }
+        },
+        onCommit: (fromIndex, toIndex, source) => {
+            const context = {
+                alreadyPreviewed: source === 'pointer' && lastPreviewedPointerTargetIndex === toIndex,
+            }
+
+            commitReorder(fromIndex, toIndex, source, context)
+            lastPreviewedPointerTargetIndex = null
+        },
+    })
+
+    const getPreviewOrder = (): number[] => {
+        const order = identityOrder(itemCount())
+        const fromIndex = pointerState.draggedIndex
+        const toIndex = pointerState.targetIndex
+
+        if (fromIndex === null || toIndex === null || fromIndex === toIndex) {
+            return order
+        }
+
+        return moveArrayItem(order, fromIndex, toIndex)
+    }
+
+    return {
+        setListElement: (element) => {
+            listElement = isHTMLElement(element) ? element : null
+        },
+        setItemElement: (index, element) => {
+            if (isHTMLElement(element)) {
+                itemElements.set(index, element)
+                return
+            }
+
+            itemElements.delete(index)
+        },
+        getItemElements: () => getRegisteredItemElements(itemElements),
+        getPreviewOrder,
+        getPreviewItems: () => {
+            const items = options.getItems()
+
+            return getPreviewOrder()
+                .filter((index) => index >= 0 && index < items.length)
+                .map((index, visualIndex) => ({ item: items[index] as T, index, visualIndex }))
+        },
+        moveItem: (index, direction) => {
+            return commitReorder(index, direction === 'up' ? index - 1 : index + 1, 'keyboard', {
+                alreadyPreviewed: false,
+            })
+        },
+        pointerDown: (index, event) => {
+            dragHitBoxes = measureItemHitBoxes()
+            pointerReorder.pointerDown(index, event)
+
+            if (!event.defaultPrevented) {
+                dragHitBoxes = null
+            }
+        },
+        cleanup: () => {
+            pointerReorder.cleanup()
+            dragHitBoxes = null
+            itemElements.clear()
+            listElement = null
+            pointerState = idleState
+            lastPreviewedPointerTargetIndex = null
+        },
+    }
+}
+
+/**
+ * Pointer-drag reorder implementation used by createReorderableList. It owns
+ * the window pointer listeners and insertion-index math.
+ */
+function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
     const canReorder = () => (options.canReorder?.() ?? true) && options.getItemCount() > 1
     let activePointer: {
         fromIndex: number

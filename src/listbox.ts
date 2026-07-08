@@ -1,10 +1,10 @@
 import type { CleanupFunction } from './dialog'
 
-export type ListboxDirection = 1 | -1
+type ListboxDirection = 1 | -1
 
-export type ListboxNavigationKey = 'ArrowDown' | 'ArrowUp' | 'Home' | 'End'
+type ListboxNavigationKey = 'ArrowDown' | 'ArrowUp' | 'Home' | 'End'
 
-export interface ListboxIndexOptions<T> {
+interface ListboxIndexOptions<T> {
     items: readonly T[]
     startIndex: number
     direction: ListboxDirection
@@ -25,7 +25,7 @@ export interface ListboxNavigationResult {
     index: number
 }
 
-export function findEnabledListboxIndex<T>(options: ListboxIndexOptions<T>): number {
+function findEnabledListboxIndex<T>(options: ListboxIndexOptions<T>): number {
     const { items, startIndex, direction, isItemDisabled, fallbackIndex = -1 } = options
 
     if (items.length === 0) {

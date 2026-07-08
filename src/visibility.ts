@@ -49,7 +49,7 @@ export function resolveVisibilityPath(
     return getByPath(data, path)
 }
 
-export function getByPath(source: unknown, path: string): unknown {
+function getByPath(source: unknown, path: string): unknown {
     if (!path) {
         return source
     }

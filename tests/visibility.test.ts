@@ -1,48 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { evaluateVisibility, getByPath, resolveVisibilityPath } from '../src/visibility'
+import { evaluateVisibility, resolveVisibilityPath } from '../src/visibility'
 import type { Visibility, VisibilityResolver } from '../src/visibility'
 
 function resolverFor(data: Record<string, unknown>, rootData: Record<string, unknown> = data): VisibilityResolver {
     return (path) => resolveVisibilityPath(path, data, rootData)
 }
-
-describe('getByPath', () => {
-    it('returns the source when the path is empty', () => {
-        const source = { a: 1 }
-        expect(getByPath(source, '')).toBe(source)
-    })
-
-    it('prefers a direct key match over dot splitting', () => {
-        const source = { 'a.b': 'direct', a: { b: 'nested' } }
-        expect(getByPath(source, 'a.b')).toBe('direct')
-    })
-
-    it('splits on dots when there is no direct key', () => {
-        expect(getByPath({ a: { b: { c: 42 } } }, 'a.b.c')).toBe(42)
-    })
-
-    it('indexes into arrays with numeric segments', () => {
-        expect(getByPath({ items: ['x', 'y', 'z'] }, 'items.1')).toBe('y')
-    })
-
-    it('returns undefined for non-integer array segments', () => {
-        expect(getByPath({ items: ['x'] }, 'items.foo')).toBeUndefined()
-    })
-
-    it('returns undefined when traversing through null/undefined', () => {
-        expect(getByPath({ a: null }, 'a.b')).toBeUndefined()
-        expect(getByPath({}, 'a.b')).toBeUndefined()
-    })
-
-    it('returns undefined for empty segments', () => {
-        expect(getByPath({ a: { b: 1 } }, 'a..b')).toBeUndefined()
-    })
-
-    it('returns undefined when descending into a primitive', () => {
-        expect(getByPath({ a: 5 }, 'a.b')).toBeUndefined()
-    })
-})
 
 describe('resolveVisibilityPath', () => {
     const data = { name: 'child', nested: { value: 1 } }
@@ -63,6 +26,41 @@ describe('resolveVisibilityPath', () => {
 
     it('defaults rootData to data', () => {
         expect(resolveVisibilityPath('$', data)).toBe(data)
+    })
+
+    it('returns the source when the path is empty', () => {
+        const source = { a: 1 }
+        expect(resolveVisibilityPath('', source)).toBe(source)
+    })
+
+    it('prefers a direct key match over dot splitting', () => {
+        const source = { 'a.b': 'direct', a: { b: 'nested' } }
+        expect(resolveVisibilityPath('a.b', source)).toBe('direct')
+    })
+
+    it('splits on dots when there is no direct key', () => {
+        expect(resolveVisibilityPath('a.b.c', { a: { b: { c: 42 } } })).toBe(42)
+    })
+
+    it('indexes into arrays with numeric segments', () => {
+        expect(resolveVisibilityPath('items.1', { items: ['x', 'y', 'z'] })).toBe('y')
+    })
+
+    it('returns undefined for non-integer array segments', () => {
+        expect(resolveVisibilityPath('items.foo', { items: ['x'] })).toBeUndefined()
+    })
+
+    it('returns undefined when traversing through null/undefined', () => {
+        expect(resolveVisibilityPath('a.b', { a: null })).toBeUndefined()
+        expect(resolveVisibilityPath('a.b', {})).toBeUndefined()
+    })
+
+    it('returns undefined for empty segments', () => {
+        expect(resolveVisibilityPath('a..b', { a: { b: 1 } })).toBeUndefined()
+    })
+
+    it('returns undefined when descending into a primitive', () => {
+        expect(resolveVisibilityPath('a.b', { a: 5 })).toBeUndefined()
     })
 })
 

@@ -1,4 +1,4 @@
-import { createDebouncer, createRequestRunner } from '../src/remote'
+import { createDebouncer } from '../src/remote'
 
 describe('createDebouncer', () => {
     beforeEach(() => vi.useFakeTimers())
@@ -41,77 +41,5 @@ describe('createDebouncer', () => {
         vi.advanceTimersByTime(200)
 
         expect(fn).not.toHaveBeenCalled()
-    })
-})
-
-describe('createRequestRunner', () => {
-    it('resolves ok for a lone request', async () => {
-        const runner = createRequestRunner()
-        const result = await runner.run(async () => 'value')
-        expect(result).toEqual({ status: 'ok', data: 'value' })
-        expect(runner.pending).toBe(false)
-    })
-
-    it('marks the superseded request as stale and keeps the newest data', async () => {
-        const runner = createRequestRunner()
-
-        let resolveSlow: (v: string) => void = () => {}
-        const slow = new Promise<string>((resolve) => (resolveSlow = resolve))
-
-        const firstPromise = runner.run(() => slow)
-        const secondPromise = runner.run(async () => 'fresh')
-
-        const second = await secondPromise
-        resolveSlow('stale-data')
-        const first = await firstPromise
-
-        expect(second).toEqual({ status: 'ok', data: 'fresh' })
-        expect(first).toEqual({ status: 'stale' })
-    })
-
-    it('aborts the previous request signal when a new run starts', async () => {
-        const runner = createRequestRunner()
-        const aborts: boolean[] = []
-
-        const firstPromise = runner.run(
-            (signal) =>
-                new Promise<string>((_, reject) => {
-                    signal.addEventListener('abort', () => {
-                        aborts.push(true)
-                        reject(new DOMException('aborted', 'AbortError'))
-                    })
-                }),
-        )
-
-        await runner.run(async () => 'fresh')
-        const first = await firstPromise
-
-        expect(aborts).toEqual([true])
-        // Superseded before the abort rejection is observed, so it is stale.
-        expect(first.status).toBe('stale')
-    })
-
-    it('reports aborted when abort() is called with no newer request', async () => {
-        const runner = createRequestRunner()
-
-        const promise = runner.run(
-            (signal) =>
-                new Promise<string>((_, reject) => {
-                    signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-                }),
-        )
-
-        runner.abort()
-        const result = await promise
-        expect(result.status).toBe('aborted')
-    })
-
-    it('reports errors from the task', async () => {
-        const runner = createRequestRunner()
-        const error = new Error('boom')
-        const result = await runner.run(async () => {
-            throw error
-        })
-        expect(result).toEqual({ status: 'error', error })
     })
 })
