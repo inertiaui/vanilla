@@ -1,6 +1,6 @@
 # Inertia UI Vanilla
 
-A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, visibility logic, color parsing, remote request orchestration, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
+A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, visibility logic, color parsing, debounced remote interactions, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
