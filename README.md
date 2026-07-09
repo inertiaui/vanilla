@@ -1,6 +1,6 @@
 # Inertia UI Vanilla
 
-A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, visibility logic, color parsing, debounced remote interactions, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
+A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, color parsing, debounced remote interactions, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
@@ -33,7 +33,6 @@ npm install @inertiaui/vanilla
 - [Debounce](#debounce)
 - [Remote Requests](#remote-requests)
 - [Color](#color)
-- [Visibility](#visibility)
 - [Helpers](#helpers)
   - [generateId](#generateid)
   - [blank](#blank)
@@ -1164,56 +1163,6 @@ formatColor(color, 'hex', { includeAlpha: false })
 
 Types exported by the color module include `HslColor`, `RgbColor`, `ParsedColor`, `ColorFormat`, and `FormatColorOptions`.
 
-## Visibility
-
-Evaluate declarative visibility rules against arbitrary data. This is useful for form builders and conditional field rendering.
-
-### resolveVisibilityPath
-
-Resolve a visibility path against local data, with `$`/`$.path` pointing at root data.
-
-```typescript
-import { resolveVisibilityPath } from '@inertiaui/vanilla'
-
-resolveVisibilityPath('name', { name: 'Jane Appleseed' })
-// 'Jane Appleseed'
-
-resolveVisibilityPath('$.account.plan', { name: 'Jane Appleseed' }, { account: { plan: 'pro' } })
-// 'pro'
-```
-
-### evaluateVisibility
-
-Evaluate a visibility condition or group. `null` and `undefined` visibility rules return `true`.
-
-```typescript
-import { evaluateVisibility, resolveVisibilityPath } from '@inertiaui/vanilla'
-import type { Visibility } from '@inertiaui/vanilla'
-
-const visibility: Visibility = {
-    operator: 'and',
-    conditions: [
-        { field: 'account.plan', operator: '=', value: 'pro' },
-        { field: 'users', operator: '>', value: 5 },
-    ],
-}
-
-const visible = evaluateVisibility(visibility, (path) => resolveVisibilityPath(path, data))
-```
-
-#### Operators
-
-| Operator | Description |
-|----------|-------------|
-| `=` / `!=` | Equality with numeric-string normalization |
-| `>` / `>=` / `<` / `<=` | Numeric comparisons |
-| `in` / `not_in` | Check membership in an expected array |
-| `contains` | Check whether an array contains a value |
-| `empty` / `not_empty` | Check empty strings, arrays, nullish values, and empty objects |
-| `truthy` / `falsy` | Check JavaScript truthiness |
-
-Groups support `and`, `or`, and `not`.
-
 ## Helpers
 
 ### generateId
@@ -1601,14 +1550,6 @@ import type {
     ReorderSource,
     RgbColor,
     TopLayerPopoverPositionOptions,
-    Visibility,
-    VisibilityComparisonOperator,
-    VisibilityCondition,
-    VisibilityGroup,
-    VisibilityGroupOperator,
-    VisibilityLeaf,
-    VisibilityMetadata,
-    VisibilityResolver,
 } from '@inertiaui/vanilla'
 ```
 

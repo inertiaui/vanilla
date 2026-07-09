@@ -92,15 +92,3 @@ export {
     formatColor,
 } from './color'
 export type { HslColor, ColorFormat, RgbColor, ParsedColor, FormatColorOptions } from './color'
-
-export { resolveVisibilityPath, evaluateVisibility } from './visibility'
-export type {
-    Visibility,
-    VisibilityCondition,
-    VisibilityComparisonOperator,
-    VisibilityGroup,
-    VisibilityGroupOperator,
-    VisibilityLeaf,
-    VisibilityMetadata,
-    VisibilityResolver,
-} from './visibility'
