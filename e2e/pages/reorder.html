@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Reorder</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            .reorder-list {
+                list-style: none;
+                margin: 0;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                max-width: 320px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+
+            .reorder-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 12px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                background: #fff;
+            }
+
+            .reorder-item.dragged {
+                opacity: 0.5;
+            }
+
+            .reorder-item.target {
+                border-color: #2563eb;
+                box-shadow: inset 0 0 0 1px #2563eb;
+            }
+
+            .reorder-handle {
+                cursor: grab;
+                touch-action: none;
+                user-select: none;
+                font-weight: bold;
+            }
+
+            .scroll-box {
+                width: 320px;
+                height: 150px;
+                overflow: auto;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+            }
+
+            .scroll-box .reorder-list {
+                border: 0;
+                min-height: 520px;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="/" class="back">All demos</a>
+        <h1>Reorder</h1>
+        <p class="page-desc">
+            Framework-agnostic reorder list controller with pointer drag, keyboard moves, live previews, and optional
+            auto-scroll. Drag a handle, or focus an item and press Arrow Up/Down.
+        </p>
+
+        <section>
+            <h2>Pointer + keyboard reorder</h2>
+            <ul id="list" class="reorder-list"></ul>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Order:</span> <span class="value" id="order-value"></span
+                ></span>
+                <span class="status"
+                    ><span class="label">Dragging:</span> <span class="value" id="dragging-value">no</span></span
+                >
+                <span class="status"
+                    ><span class="label">Target:</span> <span class="value" id="target-value">none</span></span
+                >
+                <span class="status"
+                    ><span class="label">Last move:</span> <span class="value" id="move-value">none</span></span
+                >
+            </div>
+        </section>
+
+        <section>
+            <h2>Stable pointer capture</h2>
+            <button id="stable-handle" class="reorder-handle" type="button">drag stable handle</button>
+            <span class="status"
+                ><span class="label">Stable dragging:</span>
+                <span class="value" id="stable-dragging-value">no</span></span
+            >
+        </section>
+
+        <section>
+            <h2>Nested handle</h2>
+            <div id="nested-row" class="reorder-item" style="max-width: 320px">
+                <button id="nested-handle" class="reorder-handle" type="button">
+                    <span id="nested-icon">drag nested</span>
+                </button>
+                <span>Listener is attached to the row</span>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Nested dragging:</span>
+                    <span class="value" id="nested-dragging-value">no</span></span
+                >
+            </div>
+        </section>
+
+        <section>
+            <h2>Auto-scroll reorder</h2>
+            <div id="auto-scroll-box" class="scroll-box">
+                <ul id="auto-scroll-list" class="reorder-list"></ul>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Scroll top:</span> <span class="value" id="auto-scroll-top">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Scroll frames:</span>
+                    <span class="value" id="auto-scroll-frames">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Measurements:</span>
+                    <span class="value" id="auto-scroll-measures">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Auto dragging:</span>
+                    <span class="value" id="auto-scroll-dragging">no</span></span
+                >
+            </div>
+        </section>
+
+        <script type="module">
+            import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '../../src/reorder.ts'
+
+            window.reorderLastPointerId = null
+            window.reorderStablePointerId = null
+
+            let items = ['Apple', 'Banana', 'Cherry', 'Date']
+            let autoScrollItems = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel']
+
+            const listEl = document.getElementById('list')
+            const orderValue = document.getElementById('order-value')
+            const draggingValue = document.getElementById('dragging-value')
+            const targetValue = document.getElementById('target-value')
+            const moveValue = document.getElementById('move-value')
+            const stableHandle = document.getElementById('stable-handle')
+            const stableDraggingValue = document.getElementById('stable-dragging-value')
+            const nestedRow = document.getElementById('nested-row')
+            const nestedHandle = document.getElementById('nested-handle')
+            const nestedDraggingValue = document.getElementById('nested-dragging-value')
+            const autoScrollBox = document.getElementById('auto-scroll-box')
+            const autoScrollList = document.getElementById('auto-scroll-list')
+            const autoScrollTop = document.getElementById('auto-scroll-top')
+            const autoScrollFrames = document.getElementById('auto-scroll-frames')
+            const autoScrollMeasures = document.getElementById('auto-scroll-measures')
+            const autoScrollDragging = document.getElementById('auto-scroll-dragging')
+
+            const itemElements = new Map()
+            let state = { draggedIndex: null, insertionIndex: null, targetIndex: null }
+            let autoScrollState = { draggedIndex: null, insertionIndex: null, targetIndex: null }
+            let autoScrollFrameCount = 0
+            let autoScrollMeasureCount = 0
+            let pendingFocusIndex = null
+
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getBounds: () => {
+                    const rect = listEl.getBoundingClientRect()
+                    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                },
+                onChange: (next) => {
+                    state = next
+                    render()
+                },
+                onReorder: (move) => {
+                    moveValue.textContent = `${move.source}: ${move.fromIndex} -> ${move.toIndex}`
+                    render(pendingFocusIndex)
+                    pendingFocusIndex = null
+                },
+            })
+            controller.setListElement(listEl)
+
+            const stableController = createReorderableList({
+                getItems: () => ['Stable A', 'Stable B'],
+                onChange: (next) => {
+                    stableDraggingValue.textContent = next.draggedIndex === null ? 'no' : 'yes'
+                },
+            })
+
+            const nestedController = createReorderableList({
+                getItems: () => ['Nested A', 'Nested B'],
+                onChange: (next) => {
+                    nestedDraggingValue.textContent = next.draggedIndex === null ? 'no' : 'yes'
+                },
+            })
+
+            const autoScrollController = createReorderableList({
+                getItems: () => autoScrollItems,
+                setItems: (nextItems) => {
+                    autoScrollItems = nextItems
+                },
+                getBounds: () => {
+                    const rect = autoScrollBox.getBoundingClientRect()
+                    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+                },
+                autoScroll: {
+                    edgeThreshold: 52,
+                    maxSpeed: 900,
+                    axis: 'y',
+                    getScrollContainers: () => [autoScrollBox],
+                    onScroll: () => {
+                        autoScrollFrameCount++
+                        autoScrollFrames.textContent = String(autoScrollFrameCount)
+                        autoScrollTop.textContent = String(Math.round(autoScrollBox.scrollTop))
+                    },
+                },
+                onChange: (next) => {
+                    autoScrollState = next
+                    renderAutoScroll()
+                },
+                onReorder: () => {
+                    renderAutoScroll()
+                },
+            })
+            autoScrollController.setListElement(autoScrollBox)
+
+            stableHandle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            stableHandle.addEventListener('pointerdown', (event) => {
+                window.reorderStablePointerId = event.pointerId
+                stableController.pointerDown(0, event)
+            })
+
+            nestedHandle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            nestedRow.addEventListener('pointerdown', (event) => {
+                nestedController.pointerDown(0, event)
+            })
+
+            function moveByKeyboard(index, direction) {
+                const toIndex = direction === 'up' ? index - 1 : index + 1
+                pendingFocusIndex = toIndex
+
+                if (!controller.moveItem(index, direction)) {
+                    pendingFocusIndex = null
+                }
+            }
+
+            function render(focusIndex = null) {
+                orderValue.textContent = items.join(',')
+                draggingValue.textContent = state.draggedIndex === null ? 'no' : 'yes'
+                targetValue.textContent = state.targetIndex === null ? 'none' : String(state.targetIndex)
+
+                listEl.innerHTML = ''
+                itemElements.clear()
+
+                const entries =
+                    state.draggedIndex === null
+                        ? items.map((item, index) => ({ item, index }))
+                        : controller.getPreviewItems()
+
+                entries.forEach(({ item: label, index }) => {
+                    const li = document.createElement('li')
+                    li.className = 'reorder-item'
+                    li.id = `item-${index}`
+                    li.tabIndex = 0
+                    li.dataset.label = label
+                    if (index === state.draggedIndex) li.classList.add('dragged')
+                    if (index === state.targetIndex) li.classList.add('target')
+
+                    const handle = document.createElement('span')
+                    handle.className = 'reorder-handle'
+                    handle.id = `handle-${index}`
+                    handle.textContent = 'drag'
+                    handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+                    handle.addEventListener('pointerdown', (event) => {
+                        window.reorderLastPointerId = event.pointerId
+                        controller.pointerDown(index, event)
+                    })
+
+                    const text = document.createElement('span')
+                    text.textContent = label
+
+                    li.append(handle, text)
+                    li.addEventListener('keydown', (event) => {
+                        if (event.key === 'ArrowUp') {
+                            event.preventDefault()
+                            moveByKeyboard(index, 'up')
+                        } else if (event.key === 'ArrowDown') {
+                            event.preventDefault()
+                            moveByKeyboard(index, 'down')
+                        }
+                    })
+
+                    itemElements.set(index, li)
+                    controller.setItemElement(index, li)
+                    listEl.appendChild(li)
+                })
+
+                if (focusIndex !== null) {
+                    itemElements.get(focusIndex)?.focus()
+                }
+            }
+
+            function renderAutoScroll() {
+                autoScrollTop.textContent = String(Math.round(autoScrollBox.scrollTop))
+                autoScrollFrames.textContent = String(autoScrollFrameCount)
+                autoScrollDragging.textContent = autoScrollState.draggedIndex === null ? 'no' : 'yes'
+                autoScrollList.innerHTML = ''
+
+                const entries =
+                    autoScrollState.draggedIndex === null
+                        ? autoScrollItems.map((item, index) => ({ item, index }))
+                        : autoScrollController.getPreviewItems()
+
+                entries.forEach(({ item: label, index }) => {
+                    const li = document.createElement('li')
+                    li.className = 'reorder-item'
+                    li.id = `auto-item-${index}`
+                    if (index === autoScrollState.draggedIndex) li.classList.add('dragged')
+                    if (index === autoScrollState.targetIndex) li.classList.add('target')
+                    const nativeGetBoundingClientRect = li.getBoundingClientRect.bind(li)
+                    li.getBoundingClientRect = () => {
+                        autoScrollMeasureCount++
+                        autoScrollMeasures.textContent = String(autoScrollMeasureCount)
+
+                        return nativeGetBoundingClientRect()
+                    }
+
+                    const handle = document.createElement('span')
+                    handle.className = 'reorder-handle'
+                    handle.id = `auto-handle-${index}`
+                    handle.textContent = 'drag'
+                    handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+                    handle.addEventListener('pointerdown', (event) => {
+                        autoScrollController.pointerDown(index, event)
+                    })
+
+                    const text = document.createElement('span')
+                    text.textContent = label
+
+                    li.append(handle, text)
+                    autoScrollController.setItemElement(index, li)
+                    autoScrollList.appendChild(li)
+                })
+            }
+
+            render()
+            renderAutoScroll()
+        </script>
+    </body>
+</html>

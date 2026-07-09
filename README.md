@@ -1,6 +1,6 @@
 # Inertia UI Vanilla
 
-A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu navigation, click outside detection, floating element positioning, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
+A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, color parsing, debounce helpers, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
@@ -22,7 +22,10 @@ npm install @inertiaui/vanilla
 - [Keyboard Events](#keyboard-events)
 - [Click Outside](#click-outside)
 - [Menu Navigation](#menu-navigation)
+- [Listbox Helpers](#listbox-helpers)
+- [Reorder](#reorder)
 - [Positioning](#positioning)
+- [Native Popovers](#native-popovers)
 - [Accessibility](#accessibility)
 - [Animation](#animation)
 - [Dark Mode Detection](#dark-mode-detection)
@@ -55,7 +58,7 @@ unlock()
 The function:
 
 - Sets `document.body.style.overflow` to `'hidden'`
-- Adds padding to compensate for scrollbar width (prevents layout shift)
+- Uses `scrollbar-gutter: stable` when supported, otherwise adds body padding to compensate for scrollbar width
 - Returns a cleanup function that can only unlock once
 
 ### Reference Counting
@@ -145,6 +148,21 @@ The focus trap recognizes these elements as focusable:
 - `[tabindex]:not([tabindex="-1"])`
 
 Elements with `aria-hidden="true"` are excluded. (Elements with `disabled` are already filtered by the selectors above.)
+
+### focusFirstEnabledElement
+
+Focuses the first non-disabled element in a list of candidates. Nullish values are ignored, and the function returns whether anything was focused.
+
+```typescript
+import { focusFirstEnabledElement } from '@inertiaui/vanilla'
+
+const focused = focusFirstEnabledElement([
+    document.getElementById('primary') as HTMLButtonElement | null,
+    document.getElementById('fallback') as HTMLButtonElement | null,
+])
+
+// true when an enabled element was focused
+```
 
 ## Keyboard Events
 
@@ -335,6 +353,113 @@ function openMenu(menuElement: HTMLElement) {
 }
 ```
 
+## Listbox Helpers
+
+Lower-level utilities for combobox/listbox-style controls.
+
+### resolveListboxNavigation
+
+Resolves common listbox navigation keys (`ArrowDown`, `ArrowUp`, `Home`, `End`) to a new active index.
+
+```typescript
+import { resolveListboxNavigation } from '@inertiaui/vanilla'
+
+const result = resolveListboxNavigation({
+    items,
+    currentIndex,
+    key: event.key,
+    isItemDisabled: (item) => item.disabled,
+})
+
+if (result.handled) {
+    event.preventDefault()
+    currentIndex = result.index
+}
+```
+
+### createFocusOutDismiss
+
+Schedules dismissal when focus leaves a container. This is useful for comboboxes and popovers where blur should dismiss after the browser has moved focus.
+
+```typescript
+import { createFocusOutDismiss } from '@inertiaui/vanilla'
+
+const focusOut = createFocusOutDismiss({
+    container: () => popoverElement,
+    onDismiss: closePopover,
+    delay: 150,
+    shouldIgnore: () => isPointerDownInsideScrollbar,
+})
+
+popoverElement.addEventListener('focusout', (event) => {
+    focusOut.schedule(event)
+})
+
+// Call when opening to invalidate an old scheduled dismissal.
+focusOut.markOpen()
+
+// Later
+focusOut.cleanup()
+```
+
+## Reorder
+
+Framework-neutral helpers for keyboard and pointer reordering.
+
+### createReorderableList
+
+Use `createReorderableList` when you want a headless list controller that owns item registration, live pointer preview state, keyboard moves, pointer commits, optional bounds, optional auto-scroll, and cleanup. Rendering, announcements, focus handling, and animations stay in your package or framework adapter.
+
+```typescript
+import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '@inertiaui/vanilla'
+
+let items = ['Apple', 'Banana', 'Cherry']
+
+const controller = createReorderableList({
+    getItems: () => items,
+    setItems: (nextItems) => {
+        items = nextItems
+        render()
+    },
+    getBounds: () => listElement.getBoundingClientRect(),
+    autoScroll: true,
+    onChange: () => render(),
+    onBeforeReorder: (move, context) => {
+        if (!context.alreadyPreviewed) {
+            captureAnimationSnapshot()
+        }
+    },
+    onReorder: (move) => {
+        announce(`Moved ${move.item}`)
+    },
+})
+
+controller.setListElement(listElement)
+
+items.forEach((_, index) => {
+    controller.setItemElement(index, itemElements[index])
+    handles[index].setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+    handles[index].addEventListener('pointerdown', (event) => controller.pointerDown(index, event))
+})
+
+moveUpButton.addEventListener('click', () => controller.moveItem(index, 'up'))
+```
+
+Use `getPreviewOrder()` or `getPreviewItems()` during pointer dragging when your renderer needs to show the future order before release. The reorder detail includes `alreadyPreviewed`, so consumers can avoid replaying the same release animation when the list already animated into the committed position.
+
+#### Reorderable List Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `getItems` | `() => readonly T[]` | Required | Current ordered items |
+| `setItems` | `(items: T[]) => void` | `undefined` | Optional writer used by `moveItem` and pointer commits |
+| `canReorder` | `() => boolean` | `true` | Guard before starting or committing a reorder |
+| `getBounds` | `() => ReorderBounds \| null` | Registered list rect | Optional outer active area |
+| `autoScroll` | `boolean \| AutoScrollerOptions` | `false` | Edge auto-scroll while dragging |
+| `onChange` | `(state) => void` | `undefined` | Called when pointer drag state changes |
+| `onBeforeReorder` | `(move, context) => void` | `undefined` | Called before writing items or firing `onReorder` |
+| `onReorder` | `(move, context) => void` | `undefined` | Called after a valid keyboard or pointer reorder |
+
 ## Positioning
 
 Utilities for positioning floating elements (dropdowns, tooltips, popovers) relative to a reference element. Uses [CSS Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning) when supported, with an automatic JavaScript fallback.
@@ -465,6 +590,63 @@ Updates are batched using `requestAnimationFrame` to avoid layout thrashing.
 
 When the browser supports CSS Anchor Positioning, `computePosition` uses native CSS for positioning. This provides better performance and handles edge cases like scrolling and resizing without JavaScript recalculation. The `autoUpdate` cleanup function automatically removes CSS anchor styles when called.
 
+Use `supportsTopLayerAnchorPositioning()` to check whether the browser also supports anchor positioning/sizing for top-layer popovers:
+
+```typescript
+import { supportsTopLayerAnchorPositioning } from '@inertiaui/vanilla'
+
+if (supportsTopLayerAnchorPositioning()) {
+    // Native anchor positioning can be used for popover/top-layer content.
+}
+```
+
+### positionTopLayerPopover
+
+Position a native top-layer popover (`popover="manual"` or `popover="auto"`) relative to a reference element. This helper uses CSS Anchor Positioning when available and falls back to manual fixed positioning.
+
+```typescript
+import { positionTopLayerPopover } from '@inertiaui/vanilla'
+
+popover.showPopover()
+
+const result = positionTopLayerPopover(button, popover, {
+    placement: 'bottom-start',
+    offset: 4,
+    matchReferenceWidth: true,
+    viewportMargin: 8,
+})
+```
+
+#### Top-Layer Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `placement` | `Placement` | `'bottom-start'` | Preferred placement |
+| `offset` | `number` | `4` | Distance from the reference |
+| `flip` | `boolean` | `true` | Flip when the preferred side overflows |
+| `matchReferenceWidth` | `boolean` | `false` | Set width to the reference width, clamped to viewport |
+| `viewportMargin` | `number` | `8` | Space kept between the popover and viewport edge |
+| `anchorPositioning` | `boolean` | `true` | Use CSS Anchor Positioning when supported |
+
+The helper also sets safe overflow styles (`max-width`, `max-height`, `overflow`, and `overscroll-behavior`) so long top-layer menus scroll instead of overflowing the viewport.
+
+### autoUpdateTopLayerPopover
+
+Like `autoUpdate`, but also listens to `visualViewport` scroll/resize events, which are important for top-layer popovers on mobile browsers.
+
+```typescript
+import { autoUpdateTopLayerPopover, positionTopLayerPopover } from '@inertiaui/vanilla'
+
+const cleanup = autoUpdateTopLayerPopover(button, popover, () => {
+    positionTopLayerPopover(button, popover, {
+        placement: 'bottom-start',
+        matchReferenceWidth: true,
+    })
+})
+
+cleanup()
+```
+
 ### Full Example
 
 ```typescript
@@ -489,6 +671,67 @@ function setupTooltip(trigger: HTMLElement, tooltip: HTMLElement) {
     return cleanup
 }
 ```
+
+## Native Popovers
+
+`createNativePopoverDisclosure` coordinates open state, native `showPopover()`/`hidePopover()`, top-layer positioning, auto-updates, toggle-event sync, and optional focus-out dismissal.
+
+```typescript
+import { createNativePopoverDisclosure } from '@inertiaui/vanilla'
+
+const disclosure = createNativePopoverDisclosure({
+    reference: () => button,
+    popover: () => popover,
+    position: {
+        placement: 'bottom-start',
+        offset: 4,
+        matchReferenceWidth: true,
+    },
+    focusOut: {
+        container: () => popover,
+        onDismiss: () => disclosure.closePopover(),
+    },
+    onOpenChange: (open) => {
+        button.setAttribute('aria-expanded', String(open))
+    },
+})
+
+button.addEventListener('click', () => {
+    disclosure.togglePopover(
+        () => {
+            disclosure.openPopover()
+            disclosure.showPopover()
+            disclosure.updatePosition()
+            disclosure.startAutoUpdate()
+        },
+        () => {
+            disclosure.closePopover()
+        },
+    )
+})
+
+popover.addEventListener('toggle', (event) => {
+    disclosure.handlePopoverToggle(event)
+})
+
+popover.addEventListener('focusout', (event) => {
+    disclosure.handleFocusOut(event)
+})
+```
+
+### Controller Methods
+
+| Method | Description |
+|--------|-------------|
+| `openPopover({ onBeforeOpen })` | Marks the controller open and cancels pending focus-out dismissal |
+| `closePopover({ onClose, hide })` | Marks closed, optionally hides natively, and stops auto-updates |
+| `togglePopover(open, close)` | Calls one of two callbacks based on current state |
+| `showPopover()` / `hidePopover()` | Delegates to native popover methods |
+| `handlePopoverToggle(event, { onClose })` | Syncs controller state when the browser closes the native popover |
+| `handleFocusOut(event)` | Delegates to the configured focus-out dismiss controller |
+| `updatePosition()` | Runs `positionTopLayerPopover` |
+| `startAutoUpdate()` | Starts `autoUpdateTopLayerPopover` |
+| `cleanupPopover()` | Cleans focus-out and positioning listeners |
 
 ## Accessibility
 
@@ -565,18 +808,33 @@ cleanup()
 element.getAttribute('aria-hidden') // null (removed)
 ```
 
+### markInert
+
+Marks an element as inert and returns a cleanup function. Native `HTMLElement.inert` is used when available; older browsers fall back to `aria-hidden="true"`.
+
+```typescript
+import { markInert } from '@inertiaui/vanilla'
+
+const cleanup = markInert('#app')
+
+// Later, restore the original inert/aria-hidden state
+cleanup()
+```
+
+Like `markAriaHidden`, this accepts either an element or selector and uses reference counting. Original `aria-hidden` and native `inert` values are restored after the final cleanup.
+
 ### Use with Dialogs
 
 When a dialog opens, the main content should be marked as `aria-hidden` to prevent screen readers from reading background content:
 
 ```typescript
-import { markAriaHidden, lockScroll, createFocusTrap, onEscapeKey } from '@inertiaui/vanilla'
+import { markInert, lockScroll, createFocusTrap, onEscapeKey } from '@inertiaui/vanilla'
 
 function openDialog(dialogElement: HTMLElement) {
     const closeDialog = () => cleanups.forEach(fn => fn())
 
     const cleanups = [
-        markAriaHidden('#app'),
+        markInert('#app'),
         lockScroll(),
         createFocusTrap(dialogElement),
         onEscapeKey(closeDialog),
@@ -759,6 +1017,25 @@ const handleScroll = debounce(() => {
 window.addEventListener('scroll', handleScroll)
 ```
 
+### createDebouncer
+
+Create a timeout-based debouncer with an explicit millisecond delay. This is useful for typeahead, async search, remote option loading, or any work that should wait until rapid calls settle.
+
+```typescript
+import { createDebouncer } from '@inertiaui/vanilla'
+
+const debouncer = createDebouncer(250)
+
+input.addEventListener('input', () => {
+    debouncer.schedule(() => {
+        search(input.value)
+    })
+})
+
+// Cancel a pending scheduled call
+debouncer.cancel()
+```
+
 ### detectFramerate
 
 Detect the browser's current framerate. Returns a Promise that resolves with the detected FPS (capped to the 30–240 range). Falls back to 60 if `requestAnimationFrame` is unavailable or detection times out.
@@ -800,6 +1077,86 @@ The `HslColor` type is also exported:
 ```typescript
 import type { HslColor } from '@inertiaui/vanilla'
 ```
+
+### RGB and Normalization Helpers
+
+```typescript
+import {
+    formatAlpha,
+    hexToRgb,
+    normalizeAlpha,
+    normalizeHue,
+    normalizePercent,
+    rgbToHex,
+} from '@inertiaui/vanilla'
+
+hexToRgb('#3490dc')       // { r: 52, g: 144, b: 220 }
+rgbToHex(52, 144, 220)    // '#3490dc'
+normalizeHue(-10)         // 350
+normalizePercent(120)     // 100
+normalizeAlpha(1.5)       // 1
+formatAlpha(0.5)          // '0.5'
+```
+
+### Color Parsing
+
+Parse hex, RGB/RGBA, or HSL/HSLA strings into a normalized `ParsedColor`.
+
+```typescript
+import {
+    parseColorString,
+    parseHexColor,
+    parseHslColor,
+    parseRgbColor,
+} from '@inertiaui/vanilla'
+
+parseColorString('#3490dc')
+// { hex: '#3490dc', h: 207, s: 71, l: 53, alpha: 1 }
+
+parseColorString('rgba(52, 144, 220, 0.5)')
+// { hex: '#3490dc', h: 207, s: 71, l: 53, alpha: 0.5 }
+
+parseColorString('hsla(207, 71%, 53%, 50%)')
+// { hex: '#3290dc', h: 207, s: 71, l: 53, alpha: 0.5 }
+```
+
+The lower-level parsers return `null` when the input is invalid:
+
+```typescript
+parseHexColor('#fff')
+parseRgbColor('rgb(52, 144, 220)')
+parseHslColor('hsl(207, 71%, 53%)')
+```
+
+### Channel Parsing
+
+```typescript
+import { parseAlphaChannel, parseRgbChannel } from '@inertiaui/vanilla'
+
+parseRgbChannel('50%')     // 128
+parseRgbChannel('255')     // 255
+parseAlphaChannel('50%')   // 0.5
+parseAlphaChannel('0.25')  // 0.25
+```
+
+### formatColor
+
+Format a parsed color as hex, RGB/RGBA, or HSL/HSLA. Alpha is included automatically when `alpha < 1`, or explicitly via `includeAlpha`.
+
+```typescript
+import { formatColor, parseColorString } from '@inertiaui/vanilla'
+
+const color = parseColorString('rgba(52, 144, 220, 0.5)')!
+
+formatColor(color, 'hex') // '#3490dc80'
+formatColor(color, 'rgb') // 'rgba(52, 144, 220, 0.5)'
+formatColor(color, 'hsl') // 'hsla(207, 71%, 53%, 0.5)'
+
+formatColor(color, 'hex', { includeAlpha: false })
+// '#3490dc'
+```
+
+Types exported by the color module include `HslColor`, `RgbColor`, `ParsedColor`, `ColorFormat`, and `FormatColorOptions`.
 
 ## Helpers
 
@@ -1150,16 +1507,44 @@ This library is written in TypeScript and exports the following types:
 
 ```typescript
 import type {
-    CleanupFunction,
-    FocusTrapOptions,
-    EscapeKeyOptions,
     AnimateOptions,
+    AutoScrollAxis,
+    AutoScrollContainer,
+    AutoScrollerOptions,
+    CleanupFunction,
+    ColorFormat,
+    DarkModeStrategy,
+    Debouncer,
+    EscapeKeyOptions,
+    FocusOutDismissController,
+    FocusOutDismissOptions,
+    FocusTrapOptions,
     EasingName,
+    FormatColorOptions,
+    HslColor,
+    ListboxNavigationOptions,
+    ListboxNavigationResult,
     MenuNavigationOptions,
+    NativePopoverCloseOptions,
+    NativePopoverDisclosureController,
+    NativePopoverDisclosureOptions,
+    NativePopoverOpenOptions,
+    NativePopoverToggleOptions,
     Placement,
+    ParsedColor,
     PositionOptions,
     PositionResult,
-    DarkModeStrategy,
+    ReorderBounds,
+    ReorderCommitContext,
+    ReorderDirection,
+    ReorderMove,
+    ReorderPreviewItem,
+    ReorderableListController,
+    ReorderableListOptions,
+    ReorderableListState,
+    ReorderSource,
+    RgbColor,
+    TopLayerPopoverPositionOptions,
 } from '@inertiaui/vanilla'
 ```
 

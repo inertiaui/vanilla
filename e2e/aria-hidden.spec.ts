@@ -1,5 +1,23 @@
 import { test, expect } from './test'
 
+declare global {
+    interface Window {
+        ariaHiddenDemo: {
+            markInertWithExistingAria: () => {
+                marked: { inert: boolean; ariaHidden: string | null }
+                restored: { inert: boolean; ariaHidden: string | null }
+            }
+            markInertWithoutNativeSupport: () =>
+                | { supported: false }
+                | {
+                      supported: true
+                      marked: { hasNativeInert: boolean; ariaHidden: string | null }
+                      restored: { hasNativeInert: boolean; ariaHidden: string | null }
+                  }
+        }
+    }
+}
+
 test.describe('markAriaHidden', () => {
     test('marks element as aria-hidden', async ({ page }) => {
         await page.click('#mark-btn')
@@ -55,5 +73,48 @@ test.describe('markAriaHidden', () => {
         await page.click('#unmark-btn')
         await page.click('#unmark-btn') // extra call, should be safe
         await expect(page.locator('#aria-value')).toHaveText('null')
+    })
+
+    test('marks element inert and restores it on cleanup', async ({ page }) => {
+        await page.click('#mark-inert-btn')
+        await expect(page.locator('#inert-value')).toHaveText('true')
+
+        await page.click('#unmark-inert-btn')
+        await expect(page.locator('#inert-value')).toHaveText('false')
+        await expect(page.locator('#inert-aria-value')).toHaveText('null')
+    })
+
+    test('accepts selector and reference-counts inert marks', async ({ page }) => {
+        await page.click('#mark-inert-btn')
+        await page.click('#mark-inert-selector-btn')
+        await expect(page.locator('#inert-value')).toHaveText('true')
+
+        await page.click('#unmark-inert-btn')
+        await expect(page.locator('#inert-value')).toHaveText('true')
+
+        await page.click('#unmark-inert-btn')
+        await expect(page.locator('#inert-value')).toHaveText('false')
+    })
+
+    test('markInert restores an existing aria-hidden value', async ({ page }) => {
+        const result = await page.evaluate(() => window.ariaHiddenDemo.markInertWithExistingAria())
+
+        expect(result.marked.inert || result.marked.ariaHidden === 'true').toBe(true)
+        expect(result.restored.inert).toBe(false)
+        expect(result.restored.ariaHidden).toBe('false')
+    })
+
+    test('markInert falls back to aria-hidden when native inert is unavailable', async ({ page }) => {
+        const result = await page.evaluate(() => window.ariaHiddenDemo.markInertWithoutNativeSupport())
+
+        if (!result.supported) {
+            test.skip(true, 'Native inert descriptor is not configurable in this browser')
+            return
+        }
+
+        expect(result.marked.hasNativeInert).toBe(false)
+        expect(result.marked.ariaHidden).toBe('true')
+        expect(result.restored.hasNativeInert).toBe(false)
+        expect(result.restored.ariaHidden).toBe('false')
     })
 })

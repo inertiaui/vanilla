@@ -77,6 +77,24 @@
             </div>
         </section>
 
+        <section>
+            <h2>Cleanup before listener registration</h2>
+            <p class="hint">
+                This opens a dropdown and immediately cleans up the outside-click listener before its deferred
+                registration runs.
+            </p>
+            <div class="btn-row">
+                <button id="cleanup-before-timeout-btn">Open + cleanup immediately</button>
+            </div>
+            <div id="cleanup-before-timeout-dropdown" class="panel hidden">Deferred listener cleanup dropdown</div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">State:</span>
+                    <span class="value" id="cleanup-before-timeout-status">closed</span></span
+                >
+            </div>
+        </section>
+
         <script type="module">
             import { onClickOutside } from '../../src/index.ts'
 
@@ -141,6 +159,19 @@
 
             document.getElementById('same-tick-btn').addEventListener('click', () => {
                 window.openSameTickDropdown()
+            })
+
+            const cleanupBeforeTimeout = document.getElementById('cleanup-before-timeout-dropdown')
+            const cleanupBeforeTimeoutStatus = document.getElementById('cleanup-before-timeout-status')
+
+            document.getElementById('cleanup-before-timeout-btn').addEventListener('click', () => {
+                cleanupBeforeTimeout.classList.remove('hidden')
+                cleanupBeforeTimeoutStatus.textContent = 'open'
+                const cleanup = onClickOutside(cleanupBeforeTimeout, () => {
+                    cleanupBeforeTimeout.classList.add('hidden')
+                    cleanupBeforeTimeoutStatus.textContent = 'closed'
+                })
+                cleanup()
             })
         </script>
     </body>

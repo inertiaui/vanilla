@@ -46,6 +46,16 @@
                 <button id="pos-size-cap">size + var cap</button>
                 <button id="pos-no-size">no size</button>
             </div>
+            <div style="font-weight: 600; margin: 0.5rem 0 0.25rem">Top layer</div>
+            <div class="btn-row">
+                <button id="pos-top-layer">popover</button>
+                <button id="pos-top-layer-flip">popover flip</button>
+                <button id="pos-top-layer-offset">popover offset</button>
+                <button id="pos-top-layer-no-flip">popover no flip</button>
+                <button id="pos-top-layer-manual">popover manual</button>
+                <button id="start-top-layer-auto-btn">Start auto</button>
+                <button id="stop-top-layer-auto-btn">Stop auto</button>
+            </div>
         </div>
 
         <div class="pos-panel" style="top: 10px; right: 10px">
@@ -62,9 +72,22 @@
                     ><span class="label">autoUpdate:</span> <span class="value" id="auto-update-count">0</span></span
                 >
             </div>
+            <div style="margin-top: 0.5rem">
+                <span class="status"
+                    ><span class="label">topLayerAuto:</span>
+                    <span class="value" id="top-layer-auto-update-count">0</span></span
+                >
+            </div>
         </div>
 
         <div id="reference" class="pos-reference" style="top: 300px; left: 400px">Reference</div>
+        <div
+            id="reference-wide"
+            class="pos-reference"
+            style="top: 360px; left: 400px; width: 220px; background: #0f766e"
+        >
+            Wide reference
+        </div>
         <div id="reference-bottom" class="pos-reference" style="bottom: 20px; left: 400px; background: #dc2626">
             Near bottom
         </div>
@@ -76,14 +99,30 @@
         >
             <div style="height: 1500px">Tall content</div>
         </div>
+        <div
+            id="top-layer-popover"
+            class="pos-floating"
+            popover="manual"
+            style="height: auto; padding: 4px; width: 180px"
+        >
+            <div style="height: 1500px">Top layer content</div>
+        </div>
 
         <script type="module">
-            import { computePosition, autoUpdate } from '../../src/index.ts'
+            import {
+                computePosition,
+                autoUpdate,
+                positionTopLayerPopover,
+                autoUpdateTopLayerPopover,
+                supportsTopLayerAnchorPositioning,
+            } from '../../src/index.ts'
 
             const reference = document.getElementById('reference')
+            const referenceWide = document.getElementById('reference-wide')
             const referenceBottom = document.getElementById('reference-bottom')
             const floating = document.getElementById('floating')
             const floatingTall = document.getElementById('floating-tall')
+            const topLayerPopover = document.getElementById('top-layer-popover')
             const resultX = document.getElementById('result-x')
             const resultY = document.getElementById('result-y')
             const resultPlacement = document.getElementById('result-placement')
@@ -91,9 +130,14 @@
             const floatingStyleTop = document.getElementById('floating-style-top')
             const floatingStyleLeft = document.getElementById('floating-style-left')
             const autoUpdateCount = document.getElementById('auto-update-count')
+            const topLayerAutoUpdateCount = document.getElementById('top-layer-auto-update-count')
 
             let autoCleanup = null
+            let topLayerAutoCleanup = null
             let updateCount = 0
+            let topLayerUpdateCount = 0
+
+            window.supportsTopLayerAnchorPositioning = supportsTopLayerAnchorPositioning
 
             function showResult(result) {
                 floating.style.display = 'block'
@@ -190,6 +234,91 @@
             document.getElementById('stop-auto-btn').addEventListener('click', () => {
                 autoCleanup?.()
                 autoCleanup = null
+            })
+
+            function showTopLayer(ref, options) {
+                topLayerAutoCleanup?.()
+                topLayerAutoCleanup = null
+                topLayerPopover.style.width = '180px'
+                topLayerPopover.style.maxWidth = ''
+                topLayerPopover.style.maxHeight = ''
+                topLayerPopover.style.left = ''
+                topLayerPopover.style.top = ''
+                topLayerPopover.style.display = 'block'
+
+                if (!topLayerPopover.matches(':popover-open')) {
+                    topLayerPopover.showPopover()
+                }
+
+                const result = positionTopLayerPopover(ref, topLayerPopover, options)
+                resultX.textContent = String(Math.round(result.x))
+                resultY.textContent = String(Math.round(result.y))
+                resultPlacement.textContent = result.placement
+                floatingStylePos.textContent = topLayerPopover.style.position
+                floatingStyleTop.textContent = topLayerPopover.style.top
+                floatingStyleLeft.textContent = topLayerPopover.style.left
+            }
+
+            document.getElementById('pos-top-layer').addEventListener('click', () => {
+                showTopLayer(referenceWide, { placement: 'bottom-start', matchReferenceWidth: true, viewportMargin: 8 })
+            })
+
+            document.getElementById('pos-top-layer-flip').addEventListener('click', () => {
+                showTopLayer(referenceBottom, {
+                    placement: 'bottom-start',
+                    matchReferenceWidth: true,
+                    viewportMargin: 8,
+                })
+            })
+
+            document.getElementById('pos-top-layer-offset').addEventListener('click', () => {
+                showTopLayer(referenceWide, {
+                    placement: 'bottom-start',
+                    offset: 12,
+                    matchReferenceWidth: false,
+                    viewportMargin: 16,
+                    anchorPositioning: false,
+                })
+            })
+
+            document.getElementById('pos-top-layer-no-flip').addEventListener('click', () => {
+                showTopLayer(referenceBottom, {
+                    placement: 'bottom-start',
+                    flip: false,
+                    matchReferenceWidth: false,
+                    viewportMargin: 8,
+                    anchorPositioning: false,
+                })
+            })
+
+            document.getElementById('pos-top-layer-manual').addEventListener('click', () => {
+                showTopLayer(referenceWide, {
+                    placement: 'bottom-start',
+                    matchReferenceWidth: true,
+                    viewportMargin: 8,
+                    anchorPositioning: false,
+                })
+            })
+
+            document.getElementById('start-top-layer-auto-btn').addEventListener('click', () => {
+                topLayerAutoCleanup?.()
+                topLayerUpdateCount = 0
+                topLayerAutoUpdateCount.textContent = '0'
+                showTopLayer(referenceWide, { placement: 'bottom-start', matchReferenceWidth: true, viewportMargin: 8 })
+                topLayerAutoCleanup = autoUpdateTopLayerPopover(referenceWide, topLayerPopover, () => {
+                    topLayerUpdateCount++
+                    topLayerAutoUpdateCount.textContent = String(topLayerUpdateCount)
+                    positionTopLayerPopover(referenceWide, topLayerPopover, {
+                        placement: 'bottom-start',
+                        matchReferenceWidth: true,
+                        viewportMargin: 8,
+                    })
+                })
+            })
+
+            document.getElementById('stop-top-layer-auto-btn').addEventListener('click', () => {
+                topLayerAutoCleanup?.()
+                topLayerAutoCleanup = null
             })
         </script>
     </body>

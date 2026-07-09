@@ -10,18 +10,30 @@ const FOCUSABLE_SELECTORS = [
 let scrollLockCount = 0
 let originalOverflow = ''
 let originalPaddingRight = ''
+let originalScrollbarGutter = ''
 
 export type CleanupFunction = () => void
+
+function supportsScrollbarGutter(): boolean {
+    return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('scrollbar-gutter: stable')
+}
 
 export function lockScroll(): CleanupFunction {
     if (scrollLockCount === 0) {
         originalOverflow = document.body.style.overflow
         originalPaddingRight = document.body.style.paddingRight
+        originalScrollbarGutter = document.documentElement.style.getPropertyValue('scrollbar-gutter')
 
         const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+        const canReserveScrollbarGutter = supportsScrollbarGutter()
+
+        if (canReserveScrollbarGutter) {
+            document.documentElement.style.setProperty('scrollbar-gutter', 'stable')
+        }
+
         document.body.style.overflow = 'hidden'
 
-        if (scrollbarWidth > 0) {
+        if (!canReserveScrollbarGutter && scrollbarWidth > 0) {
             document.body.style.paddingRight = `${scrollbarWidth}px`
         }
     }
@@ -44,6 +56,12 @@ function unlockScroll(): void {
     if (scrollLockCount === 0) {
         document.body.style.overflow = originalOverflow
         document.body.style.paddingRight = originalPaddingRight
+
+        if (originalScrollbarGutter) {
+            document.documentElement.style.setProperty('scrollbar-gutter', originalScrollbarGutter)
+        } else {
+            document.documentElement.style.removeProperty('scrollbar-gutter')
+        }
     }
 }
 
@@ -232,6 +250,8 @@ export interface EscapeKeyOptions {
 
 export function onEscapeKey(callback: (event: KeyboardEvent) => void, options: EscapeKeyOptions = {}): CleanupFunction {
     const { preventDefault = false, stopPropagation = false } = options
+    let abortController: AbortController | null = null
+    let listening = false
 
     function handler(event: KeyboardEvent) {
         if (event.key === 'Escape') {
@@ -245,10 +265,27 @@ export function onEscapeKey(callback: (event: KeyboardEvent) => void, options: E
         }
     }
 
-    document.addEventListener('keydown', handler)
+    if (typeof AbortController !== 'undefined') {
+        try {
+            abortController = new AbortController()
+            document.addEventListener('keydown', handler, { signal: abortController.signal })
+            listening = true
+        } catch {
+            abortController = null
+        }
+    }
+
+    if (!listening) {
+        document.addEventListener('keydown', handler)
+        listening = true
+    }
 
     return function cleanup() {
-        document.removeEventListener('keydown', handler)
+        if (abortController) {
+            abortController.abort()
+        } else {
+            document.removeEventListener('keydown', handler)
+        }
     }
 }
 
@@ -258,7 +295,21 @@ interface AriaHiddenStackItem {
     count: number
 }
 
+interface InertStackItem {
+    element: HTMLElement
+    originalAriaHidden: string | null
+    originalInert: boolean
+    count: number
+}
+
 const ariaHiddenStack: AriaHiddenStackItem[] = []
+const inertStack: InertStackItem[] = []
+
+type NativeInertElement = HTMLElement & { inert: boolean }
+
+function supportsNativeInert(element: HTMLElement): boolean {
+    return 'inert' in element
+}
 
 export function markAriaHidden(elementOrSelector: Element | string): CleanupFunction {
     const element =
@@ -306,5 +357,69 @@ function unmarkAriaHidden(element: Element): void {
             element.setAttribute('aria-hidden', originalValue)
         }
         ariaHiddenStack.splice(index, 1)
+    }
+}
+
+export function markInert(elementOrSelector: HTMLElement | string): CleanupFunction {
+    const element =
+        typeof elementOrSelector === 'string'
+            ? document.querySelector<HTMLElement>(elementOrSelector)
+            : elementOrSelector
+
+    if (!element) {
+        return function noop() {}
+    }
+
+    const existingIndex = inertStack.findIndex((item) => item.element === element)
+
+    if (existingIndex >= 0) {
+        inertStack[existingIndex].count++
+    } else {
+        const originalAriaHidden = element.getAttribute('aria-hidden')
+        const hasNativeInert = supportsNativeInert(element)
+        const originalInert = hasNativeInert ? (element as NativeInertElement).inert : false
+
+        inertStack.push({ element, originalAriaHidden, originalInert, count: 1 })
+
+        if (hasNativeInert) {
+            ;(element as NativeInertElement).inert = true
+        } else {
+            element.setAttribute('aria-hidden', 'true')
+        }
+    }
+
+    let cleaned = false
+    return function cleanup() {
+        if (cleaned) {
+            return
+        }
+        cleaned = true
+        unmarkInert(element)
+    }
+}
+
+function unmarkInert(element: HTMLElement): void {
+    const index = inertStack.findIndex((item) => item.element === element)
+
+    if (index < 0) {
+        return
+    }
+
+    inertStack[index].count--
+
+    if (inertStack[index].count <= 0) {
+        const { originalAriaHidden, originalInert } = inertStack[index]
+
+        if (supportsNativeInert(element)) {
+            ;(element as NativeInertElement).inert = originalInert
+        }
+
+        if (originalAriaHidden === null) {
+            element.removeAttribute('aria-hidden')
+        } else {
+            element.setAttribute('aria-hidden', originalAriaHidden)
+        }
+
+        inertStack.splice(index, 1)
     }
 }
