@@ -1,4 +1,4 @@
-import { createDebouncer } from '../src/remote'
+import { createDebouncer } from '../src/debounce'
 
 describe('createDebouncer', () => {
     beforeEach(() => vi.useFakeTimers())

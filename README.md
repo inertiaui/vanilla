@@ -1,6 +1,6 @@
 # Inertia UI Vanilla
 
-A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, color parsing, debounced remote interactions, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
+A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, color parsing, debounce helpers, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
@@ -31,7 +31,6 @@ npm install @inertiaui/vanilla
 - [Dark Mode Detection](#dark-mode-detection)
 - [RTL Support](#rtl-support)
 - [Debounce](#debounce)
-- [Remote Requests](#remote-requests)
 - [Color](#color)
 - [Helpers](#helpers)
   - [generateId](#generateid)
@@ -1018,24 +1017,9 @@ const handleScroll = debounce(() => {
 window.addEventListener('scroll', handleScroll)
 ```
 
-### detectFramerate
-
-Detect the browser's current framerate. Returns a Promise that resolves with the detected FPS (capped to the 30–240 range). Falls back to 60 if `requestAnimationFrame` is unavailable or detection times out.
-
-```typescript
-import { detectFramerate } from '@inertiaui/vanilla'
-
-const fps = await detectFramerate()
-console.log(`Running at ${fps} FPS`)
-```
-
-## Remote Requests
-
-Small helpers for debounced remote requests, useful for typeahead, async search, and remote option loading.
-
 ### createDebouncer
 
-Create a debouncer with an explicit millisecond delay.
+Create a timeout-based debouncer with an explicit millisecond delay. This is useful for typeahead, async search, remote option loading, or any work that should wait until rapid calls settle.
 
 ```typescript
 import { createDebouncer } from '@inertiaui/vanilla'
@@ -1050,6 +1034,17 @@ input.addEventListener('input', () => {
 
 // Cancel a pending scheduled call
 debouncer.cancel()
+```
+
+### detectFramerate
+
+Detect the browser's current framerate. Returns a Promise that resolves with the detected FPS (capped to the 30–240 range). Falls back to 60 if `requestAnimationFrame` is unavailable or detection times out.
+
+```typescript
+import { detectFramerate } from '@inertiaui/vanilla'
+
+const fps = await detectFramerate()
+console.log(`Running at ${fps} FPS`)
 ```
 
 ## Color

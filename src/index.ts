@@ -43,9 +43,6 @@ export type {
     ReorderSource,
 } from './reorder'
 
-export { createDebouncer } from './remote'
-export type { Debouncer } from './remote'
-
 export { focusFirstEnabledElement } from './focus'
 
 export { createNativePopoverDisclosure } from './nativePopover'
@@ -68,7 +65,8 @@ export {
 export type { Placement, PositionOptions, TopLayerPopoverPositionOptions, PositionResult } from './position'
 
 export { blank } from './blank'
-export { debounce, detectFramerate } from './debounce'
+export { debounce, createDebouncer, detectFramerate } from './debounce'
+export type { Debouncer } from './debounce'
 export { prefersDarkMode } from './darkMode'
 export type { DarkModeStrategy } from './darkMode'
 export { isRtl, onRtlChange } from './rtl'
