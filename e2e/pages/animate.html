@@ -5,6 +5,25 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Animate</title>
         <link rel="stylesheet" href="shared.css" />
+        <style>
+            .snapshot-list {
+                display: grid;
+                gap: 0.5rem;
+                width: 220px;
+                margin-bottom: 0.75rem;
+            }
+
+            .snapshot-row {
+                height: 36px;
+                display: flex;
+                align-items: center;
+                padding: 0 0.75rem;
+                border: 1px solid #cbd5e1;
+                border-radius: 0.375rem;
+                background: #f8fafc;
+                font-size: 0.875rem;
+            }
+        </style>
     </head>
     <body>
         <a href="/" class="back">All demos</a>
@@ -42,13 +61,49 @@
             </div>
         </section>
 
+        <section>
+            <h2>Snapshot reorder</h2>
+            <p class="hint">Reorders existing DOM nodes and animates them from their captured positions.</p>
+            <div id="snapshot-list" class="snapshot-list">
+                <div class="snapshot-row" data-snapshot-row data-id="apple">Apple</div>
+                <div class="snapshot-row" data-snapshot-row data-id="banana">Banana</div>
+                <div class="snapshot-row" data-snapshot-row data-id="cherry">Cherry</div>
+            </div>
+            <div class="btn-row">
+                <button id="snapshot-reorder-btn">Move first to end</button>
+            </div>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Order:</span> <span class="value" id="snapshot-order">Apple, Banana, Cherry</span></span
+                >
+                <span class="status"
+                    ><span class="label">Animations:</span> <span class="value" id="snapshot-animation-count">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">First transform:</span>
+                    <span class="value" id="snapshot-first-transform">none</span></span
+                >
+            </div>
+        </section>
+
         <script type="module">
-            import { animate, cancelAnimations } from '../../src/index.ts'
+            import {
+                animate,
+                animateFromSnapshot,
+                cancelAnimations,
+                captureAnimationSnapshot,
+            } from '../../src/index.ts'
 
             const box = document.getElementById('box')
             const status = document.getElementById('status')
             const boxOpacity = document.getElementById('box-opacity')
             const animationCount = document.getElementById('animation-count')
+            const snapshotList = document.getElementById('snapshot-list')
+            const snapshotOrder = document.getElementById('snapshot-order')
+            const snapshotAnimationCount = document.getElementById('snapshot-animation-count')
+            const snapshotFirstTransform = document.getElementById('snapshot-first-transform')
+
+            window.snapshotAnimationReport = null
 
             function updateOpacity() {
                 boxOpacity.textContent = getComputedStyle(box).opacity
@@ -93,6 +148,41 @@
                 }, 50)
                 await promise
                 status.textContent = 'resolved'
+            })
+
+            function snapshotRows() {
+                return Array.from(snapshotList.querySelectorAll('[data-snapshot-row]'))
+            }
+
+            function updateSnapshotOrder() {
+                snapshotOrder.textContent = snapshotRows()
+                    .map((row) => row.textContent.trim())
+                    .join(', ')
+            }
+
+            document.getElementById('snapshot-reorder-btn').addEventListener('click', () => {
+                const snapshot = captureAnimationSnapshot(snapshotRows())
+                const first = snapshotList.firstElementChild
+
+                snapshotList.appendChild(first)
+
+                const animations = animateFromSnapshot(snapshot, snapshotRows(), {
+                    duration: 400,
+                    easing: 'linear',
+                    fill: 'none',
+                })
+                const transforms = animations
+                    .map((animation) => animation.effect?.getKeyframes?.()[0]?.transform)
+                    .filter(Boolean)
+
+                updateSnapshotOrder()
+                snapshotAnimationCount.textContent = String(animations.length)
+                snapshotFirstTransform.textContent = transforms[0] ?? 'none'
+                window.snapshotAnimationReport = {
+                    count: animations.length,
+                    transforms,
+                    order: snapshotOrder.textContent,
+                }
             })
         </script>
     </body>

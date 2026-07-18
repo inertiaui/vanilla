@@ -42,4 +42,22 @@ test.describe('animate', () => {
         await page.click('#animate-then-cancel-btn')
         await expect(page.locator('#status')).toHaveText('resolved')
     })
+
+    test('animates reordered elements from a captured snapshot', async ({ page }) => {
+        await page.click('#snapshot-reorder-btn')
+
+        await expect(page.locator('#snapshot-order')).toHaveText('Banana, Cherry, Apple')
+        await expect(page.locator('#snapshot-animation-count')).toHaveText('3')
+
+        const report = await page.evaluate(() => (window as any).snapshotAnimationReport)
+
+        expect(report.count).toBe(3)
+        expect(report.order).toBe('Banana, Cherry, Apple')
+        expect(report.transforms).toHaveLength(3)
+        expect(
+            report.transforms.some((transform: string) =>
+                /translate3d\(0px, -?\d+(?:\.\d+)?px, 0(?:px)?\)/.test(transform),
+            ),
+        ).toBe(true)
+    })
 })

@@ -10,6 +10,10 @@
                 min-height: 2000px;
                 max-width: none;
             }
+
+            #top-layer-popover.force-anchor-overflow[class*='iui-anchor-'] {
+                transform: translateY(-999px);
+            }
         </style>
     </head>
     <body>
@@ -53,6 +57,7 @@
                 <button id="pos-top-layer-offset">popover offset</button>
                 <button id="pos-top-layer-no-flip">popover no flip</button>
                 <button id="pos-top-layer-manual">popover manual</button>
+                <button id="pos-top-layer-anchor-overflow">anchor overflow</button>
                 <button id="start-top-layer-auto-btn">Start auto</button>
                 <button id="stop-top-layer-auto-btn">Stop auto</button>
             </div>
@@ -236,7 +241,7 @@
                 autoCleanup = null
             })
 
-            function showTopLayer(ref, options) {
+            function showTopLayer(ref, options, modifiers = {}) {
                 topLayerAutoCleanup?.()
                 topLayerAutoCleanup = null
                 topLayerPopover.style.width = '180px'
@@ -245,6 +250,7 @@
                 topLayerPopover.style.left = ''
                 topLayerPopover.style.top = ''
                 topLayerPopover.style.display = 'block'
+                topLayerPopover.classList.toggle('force-anchor-overflow', modifiers.forceAnchorOverflow === true)
 
                 if (!topLayerPopover.matches(':popover-open')) {
                     topLayerPopover.showPopover()
@@ -298,6 +304,14 @@
                     viewportMargin: 8,
                     anchorPositioning: false,
                 })
+            })
+
+            document.getElementById('pos-top-layer-anchor-overflow').addEventListener('click', () => {
+                showTopLayer(
+                    referenceWide,
+                    { placement: 'bottom-start', matchReferenceWidth: true, viewportMargin: 8 },
+                    { forceAnchorOverflow: true },
+                )
             })
 
             document.getElementById('start-top-layer-auto-btn').addEventListener('click', () => {

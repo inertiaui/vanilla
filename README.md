@@ -411,9 +411,16 @@ Framework-neutral helpers for keyboard and pointer reordering.
 Use `createReorderableList` when you want a headless list controller that owns item registration, live pointer preview state, keyboard moves, pointer commits, optional bounds, optional auto-scroll, and cleanup. Rendering, announcements, focus handling, and animations stay in your package or framework adapter.
 
 ```typescript
-import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '@inertiaui/vanilla'
+import {
+    animateFromSnapshot,
+    captureAnimationSnapshot,
+    createReorderableList,
+    REORDERABLE_LIST_HANDLE_ATTRIBUTE,
+    type AnimationSnapshot,
+} from '@inertiaui/vanilla'
 
 let items = ['Apple', 'Banana', 'Cherry']
+let animationSnapshot: AnimationSnapshot | null = null
 
 const controller = createReorderableList({
     getItems: () => items,
@@ -426,10 +433,12 @@ const controller = createReorderableList({
     onChange: () => render(),
     onBeforeReorder: (move, context) => {
         if (!context.alreadyPreviewed) {
-            captureAnimationSnapshot()
+            animationSnapshot = captureAnimationSnapshot(itemElements)
         }
     },
     onReorder: (move) => {
+        animateFromSnapshot(animationSnapshot, itemElements)
+        animationSnapshot = null
         announce(`Moved ${move.item}`)
     },
 })
@@ -629,6 +638,10 @@ const result = positionTopLayerPopover(button, popover, {
 | `anchorPositioning` | `boolean` | `true` | Use CSS Anchor Positioning when supported |
 
 The helper also sets safe overflow styles (`max-width`, `max-height`, `overflow`, and `overscroll-behavior`) so long top-layer menus scroll instead of overflowing the viewport.
+
+When CSS Anchor Positioning is available but the rendered top-layer rectangle
+still overflows the viewport, the helper automatically switches to the same
+manual fixed-positioning fallback used when anchors are unavailable.
 
 ### autoUpdateTopLayerPopover
 
@@ -897,6 +910,55 @@ Or provide a custom easing string:
 
 ```typescript
 await animate(element, keyframes, { easing: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)' })
+```
+
+### captureAnimationSnapshot and animateFromSnapshot
+
+Capture element positions before your renderer changes layout, then animate the
+moved elements from their old positions to their new positions. This is useful
+for FLIP-style reorder animations in framework adapters.
+
+```typescript
+import { animateFromSnapshot, captureAnimationSnapshot } from '@inertiaui/vanilla'
+
+const rows = () => document.querySelectorAll<HTMLElement>('[data-reorder-row]')
+const snapshot = captureAnimationSnapshot(rows())
+
+renderItemsInNewOrder()
+
+animateFromSnapshot(snapshot, rows(), {
+    duration: 160,
+    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    fill: 'none',
+    minimumDelta: 0.5,
+    includeCurrentTransform: true,
+})
+```
+
+`captureAnimationSnapshot` returns `null` when Web Animations are unavailable or
+the user prefers reduced motion. `animateFromSnapshot` only cancels previous
+snapshot animations it started for the same element, leaving unrelated hover,
+focus, and component animations alone.
+
+#### Snapshot Animation Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `duration` | `number` | `160` | Animation duration in milliseconds |
+| `easing` | `string \| EasingName` | `'out'` | Easing preset name or CSS easing string |
+| `fill` | `FillMode` | `'none'` | Web Animations fill mode |
+| `minimumDelta` | `number` | `0.5` | Ignore moves smaller than this many pixels |
+| `includeCurrentTransform` | `boolean` | `true` | Fold the element's current translate transform into the next animation |
+
+Use `prefersReducedMotion()` and `supportsWebAnimations()` when an adapter needs
+to branch before capturing a snapshot:
+
+```typescript
+import { prefersReducedMotion, supportsWebAnimations } from '@inertiaui/vanilla'
+
+if (!prefersReducedMotion() && supportsWebAnimations()) {
+    const snapshot = captureAnimationSnapshot(rows())
+}
 ```
 
 ### cancelAnimations

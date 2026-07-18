@@ -281,6 +281,47 @@ test.describe('positionTopLayerPopover', () => {
         expect(styles.hasAnchorClass).toBe(true)
     })
 
+    test('falls back to manual positioning when CSS anchor output still overflows the viewport', async ({ page }) => {
+        const supported = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
+
+        test.skip(!supported, 'CSS Anchor Positioning is not available in this browser')
+
+        await page.click('#pos-top-layer-anchor-overflow')
+
+        const styles = await page.locator('#top-layer-popover').evaluate((el) => {
+            const popover = el as HTMLElement
+            const reference = document.getElementById('reference-wide') as HTMLElement
+            const rect = popover.getBoundingClientRect()
+
+            return {
+                anchorName: reference.style.getPropertyValue('anchor-name'),
+                positionAnchor: popover.style.getPropertyValue('position-anchor'),
+                top: popover.style.top,
+                left: popover.style.left,
+                transform: getComputedStyle(popover).transform,
+                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+                rect: {
+                    top: rect.top,
+                    left: rect.left,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                },
+            }
+        })
+
+        expect(styles.anchorName).toBe('')
+        expect(styles.positionAnchor).toBe('')
+        expect(styles.top).toMatch(/px$/)
+        expect(styles.left).toMatch(/px$/)
+        expect(styles.transform).toBe('none')
+        expect(styles.hasAnchorClass).toBe(false)
+        expect(styles.rect.top).toBeGreaterThanOrEqual(0)
+        expect(styles.rect.left).toBeGreaterThanOrEqual(0)
+        expect(styles.rect.right).toBeLessThanOrEqual(1024)
+        expect(styles.rect.bottom).toBeLessThanOrEqual(768)
+        await expect(page.locator('#result-placement')).toHaveText('bottom-start')
+    })
+
     test('uses CSS stretch sizing for top-layer popovers when available', async ({ page }) => {
         const supported = await page.evaluate(
             () =>

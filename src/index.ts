@@ -8,8 +8,16 @@ export {
     sameUrlPath,
     onceChildrenRendered,
 } from './helpers'
-export { easings, animate, cancelAnimations } from './animate'
-export type { EasingName, AnimateOptions } from './animate'
+export {
+    easings,
+    animate,
+    cancelAnimations,
+    prefersReducedMotion,
+    supportsWebAnimations,
+    captureAnimationSnapshot,
+    animateFromSnapshot,
+} from './animate'
+export type { EasingName, AnimateOptions, AnimationSnapshot, AnimateFromSnapshotOptions } from './animate'
 
 export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden, markInert } from './dialog'
 export type { CleanupFunction, FocusTrapOptions, EscapeKeyOptions } from './dialog'

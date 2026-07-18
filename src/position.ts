@@ -181,6 +181,17 @@ function clampTopLayerCoordinates(
     }
 }
 
+function topLayerRectOverflowsViewport(rect: DOMRect, viewport: ViewportRect): boolean {
+    const tolerance = 0.5
+
+    return (
+        rect.top < viewport.top - tolerance ||
+        rect.left < viewport.left - tolerance ||
+        rect.right > viewport.right + tolerance ||
+        rect.bottom > viewport.bottom + tolerance
+    )
+}
+
 function getAvailableSpace(
     referenceRect: DOMRect,
     viewport: ViewportRect,
@@ -805,7 +816,9 @@ export function positionTopLayerPopover(
 
         const finalRect = floating.getBoundingClientRect()
 
-        return { x: finalRect.left, y: finalRect.top, placement: resolvedPlacement }
+        if (!topLayerRectOverflowsViewport(finalRect, viewport)) {
+            return { x: finalRect.left, y: finalRect.top, placement: resolvedPlacement }
+        }
     }
 
     detachAnchorPositioning(reference, floating)
