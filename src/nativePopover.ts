@@ -8,6 +8,16 @@ type NativeToggleEvent = Event & {
     newState?: 'open' | 'closed'
 }
 
+function restoreVisibility(popover: HTMLElement, visibility: string | undefined): void {
+    if (visibility === undefined) {
+        popover.style.removeProperty('visibility')
+
+        return
+    }
+
+    popover.style.setProperty('visibility', visibility)
+}
+
 export interface NativePopoverDisclosureOptions {
     reference: ElementGetter
     popover: ElementGetter
@@ -97,7 +107,20 @@ export function createNativePopoverDisclosure(
     }
 
     const showPopover = () => {
-        options.popover()?.showPopover()
+        const elements = getElements()
+        if (!elements) return
+
+        const { reference, popover } = elements
+        const previousVisibility = popover.style.getPropertyValue('visibility') || undefined
+
+        popover.style.setProperty('visibility', 'hidden')
+
+        try {
+            popover.showPopover()
+            positionTopLayerPopover(reference, popover, options.position)
+        } finally {
+            restoreVisibility(popover, previousVisibility)
+        }
     }
 
     const hidePopover = () => {

@@ -1,5 +1,9 @@
 import { createNativePopoverDisclosure } from '../src/nativePopover'
 
+function rect(left: number, top: number, right: number, bottom: number): DOMRect {
+    return { left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }
+}
+
 function createPopoverElements() {
     const reference = document.createElement('button')
     const popover = document.createElement('div')
@@ -24,7 +28,11 @@ function createPopoverElements() {
 
 describe('createNativePopoverDisclosure', () => {
     beforeEach(() => vi.useFakeTimers())
-    afterEach(() => vi.useRealTimers())
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.restoreAllMocks()
+        document.body.innerHTML = ''
+    })
 
     it('opens, shows, closes, and hides the popover', () => {
         const elements = createPopoverElements()
@@ -55,6 +63,41 @@ describe('createNativePopoverDisclosure', () => {
 
         disclosure.cleanupPopover()
         elements.cleanup()
+    })
+
+    it('keeps the popover hidden until its first position is applied', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
+        Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined })
+
+        const elements = createPopoverElements()
+        let visibilityWhenShown = ''
+        elements.showPopover.mockImplementation(() => {
+            visibilityWhenShown = elements.popover.style.visibility
+        })
+        const measurePopover = vi.fn(() => rect(0, 0, 200, 120))
+        elements.reference.getBoundingClientRect = () => rect(80, 120, 300, 160)
+        elements.popover.getBoundingClientRect = measurePopover
+        elements.popover.style.visibility = 'visible'
+
+        const disclosure = createNativePopoverDisclosure({
+            reference: () => elements.reference,
+            popover: () => elements.popover,
+            position: { placement: 'bottom-start' },
+        })
+
+        disclosure.showPopover()
+
+        expect(visibilityWhenShown).toBe('hidden')
+        expect(elements.popover.style.visibility).toBe('visible')
+        expect(measurePopover).toHaveBeenCalled()
+        const positionAnchor =
+            elements.popover.style.getPropertyValue('position-anchor') ||
+            (elements.popover.style as CSSStyleDeclaration & { positionAnchor?: string }).positionAnchor ||
+            ''
+        expect(elements.popover.style.left === '80px' || positionAnchor.startsWith('--iui-anchor-')).toBe(true)
+
+        disclosure.cleanupPopover()
     })
 
     it('does not hide when close is configured without native hiding', () => {
