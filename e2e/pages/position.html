@@ -59,6 +59,7 @@
                 <button id="pos-top-layer-manual">popover manual</button>
                 <button id="pos-top-layer-anchor-overflow">anchor overflow</button>
                 <button id="start-top-layer-auto-btn">Start auto</button>
+                <button id="start-top-layer-auto-manual-btn">Start manual auto</button>
                 <button id="stop-top-layer-auto-btn">Stop auto</button>
             </div>
         </div>
@@ -314,19 +315,32 @@
                 )
             })
 
-            document.getElementById('start-top-layer-auto-btn').addEventListener('click', () => {
+            function startTopLayerAuto(ref, options) {
                 topLayerAutoCleanup?.()
                 topLayerUpdateCount = 0
                 topLayerAutoUpdateCount.textContent = '0'
-                showTopLayer(referenceWide, { placement: 'bottom-start', matchReferenceWidth: true, viewportMargin: 8 })
-                topLayerAutoCleanup = autoUpdateTopLayerPopover(referenceWide, topLayerPopover, () => {
+                showTopLayer(ref, options)
+                topLayerAutoCleanup = autoUpdateTopLayerPopover(ref, topLayerPopover, () => {
                     topLayerUpdateCount++
                     topLayerAutoUpdateCount.textContent = String(topLayerUpdateCount)
-                    positionTopLayerPopover(referenceWide, topLayerPopover, {
-                        placement: 'bottom-start',
-                        matchReferenceWidth: true,
-                        viewportMargin: 8,
-                    })
+                    positionTopLayerPopover(ref, topLayerPopover, options)
+                })
+            }
+
+            document.getElementById('start-top-layer-auto-btn').addEventListener('click', () => {
+                startTopLayerAuto(referenceWide, {
+                    placement: 'bottom-start',
+                    matchReferenceWidth: true,
+                    viewportMargin: 8,
+                })
+            })
+
+            document.getElementById('start-top-layer-auto-manual-btn').addEventListener('click', () => {
+                startTopLayerAuto(referenceWide, {
+                    placement: 'bottom-start',
+                    matchReferenceWidth: true,
+                    viewportMargin: 8,
+                    anchorPositioning: false,
                 })
             })
 

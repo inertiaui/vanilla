@@ -262,6 +262,10 @@ test.describe('positionTopLayerPopover', () => {
         const styles = await page.locator('#top-layer-popover').evaluate((el) => {
             const popover = el as HTMLElement
             const reference = document.getElementById('reference-wide') as HTMLElement
+            const anchorClass = Array.from(popover.classList).find((className) => className.startsWith('iui-anchor-'))
+            const anchorRule = Array.from(document.styleSheets)
+                .flatMap((styleSheet) => Array.from(styleSheet.cssRules))
+                .find((rule) => (rule as CSSStyleRule).selectorText === `.${anchorClass}`) as CSSStyleRule | undefined
 
             return {
                 anchorName: reference.style.getPropertyValue('anchor-name'),
@@ -269,7 +273,8 @@ test.describe('positionTopLayerPopover', () => {
                 top: popover.style.top,
                 left: popover.style.left,
                 width: popover.style.width,
-                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+                hasAnchorClass: Boolean(anchorClass),
+                anchorRuleText: anchorRule?.cssText ?? '',
             }
         })
 
@@ -279,6 +284,7 @@ test.describe('positionTopLayerPopover', () => {
         expect(styles.left).toBe('')
         expect(styles.width).toContain('anchor-size(width)')
         expect(styles.hasAnchorClass).toBe(true)
+        expect(styles.anchorRuleText).toContain('position-try')
     })
 
     test('falls back to manual positioning when CSS anchor output still overflows the viewport', async ({ page }) => {
@@ -501,8 +507,33 @@ test.describe('positionTopLayerPopover', () => {
         expect(floatingBox!.y).toBeGreaterThanOrEqual(8)
     })
 
-    test('auto-updates top-layer popovers and stops after cleanup', async ({ page }) => {
+    test('lets CSS-anchored top-layer popovers follow scroll without JS scroll updates', async ({ page }) => {
+        const usesCssAnchorPositioning = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
+
         await page.click('#start-top-layer-auto-btn')
+
+        await page.waitForTimeout(100)
+        const countAfterStart = Number(await page.locator('#top-layer-auto-update-count').textContent())
+
+        await page.evaluate(() => window.scrollBy(0, 100))
+        await page.waitForTimeout(100)
+        const countAfterScroll = Number(await page.locator('#top-layer-auto-update-count').textContent())
+        if (usesCssAnchorPositioning) {
+            expect(countAfterScroll).toBe(countAfterStart)
+        } else {
+            expect(countAfterScroll).toBeGreaterThan(countAfterStart)
+        }
+
+        await page.evaluate(() => document.getElementById('stop-top-layer-auto-btn')?.click())
+        const countAfterStop = Number(await page.locator('#top-layer-auto-update-count').textContent())
+        await page.evaluate(() => window.scrollBy(0, 100))
+        await page.waitForTimeout(100)
+        const countAfterSecondScroll = Number(await page.locator('#top-layer-auto-update-count').textContent())
+        expect(countAfterSecondScroll).toBe(countAfterStop)
+    })
+
+    test('auto-updates manual top-layer fallback popovers and stops after cleanup', async ({ page }) => {
+        await page.click('#start-top-layer-auto-manual-btn')
 
         await page.waitForTimeout(100)
         const countAfterStart = Number(await page.locator('#top-layer-auto-update-count').textContent())
@@ -520,18 +551,120 @@ test.describe('positionTopLayerPopover', () => {
         expect(countAfterSecondScroll).toBe(countAfterStop)
     })
 
-    test('keeps a top-layer popover anchored when the reference scrolls out of view', async ({ page }) => {
+    test('parks a CSS-anchored top-layer popover when the reference scrolls out of view', async ({ page }) => {
+        const usesCssAnchorPositioning = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
+
+        test.skip(!usesCssAnchorPositioning, 'CSS Anchor Positioning is not available in this browser')
+
         await page.click('#start-top-layer-auto-btn')
         await page.waitForTimeout(100)
+        const before = await page.locator('#top-layer-popover').evaluate((el) => {
+            const popover = el as HTMLElement
+            const reference = document.getElementById('reference-wide') as HTMLElement
+
+            return {
+                anchorName: reference.style.getPropertyValue('anchor-name'),
+                positionAnchor: popover.style.getPropertyValue('position-anchor'),
+                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+            }
+        })
+        const countAfterStart = Number(await page.locator('#top-layer-auto-update-count').textContent())
 
         await page.evaluate(() => window.scrollBy(0, 700))
         await page.waitForTimeout(100)
 
         const refBox = await page.locator('#reference-wide').boundingBox()
-        const floatingBox = await page.locator('#top-layer-popover').boundingBox()
+        const parked = await page.locator('#top-layer-popover').evaluate((el) => {
+            const popover = el as HTMLElement
+            const reference = document.getElementById('reference-wide') as HTMLElement
+
+            return {
+                anchorName: reference.style.getPropertyValue('anchor-name'),
+                positionAnchor: popover.style.getPropertyValue('position-anchor'),
+                visibility: popover.style.visibility,
+                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+            }
+        })
+        const countAfterPark = Number(await page.locator('#top-layer-auto-update-count').textContent())
 
         expect(refBox!.y + refBox!.height).toBeLessThan(0)
-        expect(floatingBox!.y).toBeLessThan(0)
-        expect(Math.abs(floatingBox!.y - (refBox!.y + refBox!.height + 4))).toBeLessThan(5)
+        expect(before.anchorName).toMatch(/^--iui-anchor-/)
+        expect(before.positionAnchor).toBe(before.anchorName)
+        expect(before.hasAnchorClass).toBe(true)
+        expect(parked.anchorName).toBe(before.anchorName)
+        expect(parked.positionAnchor).toBe(before.positionAnchor)
+        expect(parked.visibility).toBe('hidden')
+        expect(parked.hasAnchorClass).toBe(true)
+        expect(countAfterPark).toBe(countAfterStart)
+
+        await page.evaluate(() => window.scrollBy(0, -700))
+        await page.waitForTimeout(100)
+
+        const restored = await page.locator('#top-layer-popover').evaluate((el) => {
+            const popover = el as HTMLElement
+            const reference = document.getElementById('reference-wide') as HTMLElement
+
+            return {
+                anchorName: reference.style.getPropertyValue('anchor-name'),
+                positionAnchor: popover.style.getPropertyValue('position-anchor'),
+                visibility: popover.style.visibility,
+                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+            }
+        })
+        const countAfterRestore = Number(await page.locator('#top-layer-auto-update-count').textContent())
+
+        expect(restored.anchorName).toBe(before.anchorName)
+        expect(restored.positionAnchor).toBe(before.positionAnchor)
+        expect(restored.visibility).toBe('')
+        expect(restored.hasAnchorClass).toBe(true)
+        expect(countAfterRestore).toBeGreaterThanOrEqual(countAfterPark)
+    })
+})
+
+test.describe('Safari top-layer popover positioning', () => {
+    test.use({
+        userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+    })
+
+    test('uses the manual top-layer fallback for Safari user agents', async ({ page }) => {
+        await page.addInitScript(() => {
+            const originalSupports = CSS.supports.bind(CSS)
+
+            Object.defineProperty(CSS, 'supports', {
+                configurable: true,
+                value: (property: string, value?: string) => {
+                    if (property === '-webkit-backdrop-filter' && value === 'none') {
+                        return true
+                    }
+
+                    return value === undefined ? originalSupports(property) : originalSupports(property, value)
+                },
+            })
+        })
+        await page.reload()
+        await page.setViewportSize({ width: 1024, height: 768 })
+        await page.click('#pos-top-layer')
+
+        const styles = await page.locator('#top-layer-popover').evaluate((el) => {
+            const popover = el as HTMLElement
+            const reference = document.getElementById('reference-wide') as HTMLElement
+
+            return {
+                anchorName: reference.style.getPropertyValue('anchor-name'),
+                positionAnchor: popover.style.getPropertyValue('position-anchor'),
+                top: popover.style.top,
+                left: popover.style.left,
+                width: popover.style.width,
+                hasAnchorClass: Array.from(popover.classList).some((className) => className.startsWith('iui-anchor-')),
+            }
+        })
+
+        expect(styles.anchorName).toBe('')
+        expect(styles.positionAnchor).toBe('')
+        expect(styles.top).toMatch(/px$/)
+        expect(styles.left).toMatch(/px$/)
+        expect(styles.width).toMatch(/px$/)
+        expect(styles.hasAnchorClass).toBe(false)
     })
 })
