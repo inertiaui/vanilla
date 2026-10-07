@@ -282,6 +282,7 @@ cleanup()
 | `orientation` | `'vertical' \| 'horizontal'` | `'vertical'` | Arrow key direction |
 | `loop` | `boolean` | `true` | Wrap focus from last to first item |
 | `typeAhead` | `boolean` | `true` | Enable type-ahead character search |
+| `initialFocus` | `'first' \| 'last'` | `'first'` | Initial enabled item to focus and give the active tab stop |
 | `onActivate` | `(item: HTMLElement) => void` | `undefined` | Called when an item is activated via Enter or Space |
 
 ### Keyboard Support
@@ -686,6 +687,75 @@ function setupTooltip(trigger: HTMLElement, tooltip: HTMLElement) {
 ```
 
 ## Native Popovers
+
+### Managed popovers and menus
+
+`createPopoverController` composes the disclosure, positioning, dismissal, and menu helpers into a framework-independent lifecycle. It supports native auto popovers and a positioned fallback. The existing `createNativePopoverDisclosure` API below remains available for consumers that need to manage each step themselves.
+
+```html
+<button id="trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="menu">Actions</button>
+<div id="menu" role="menu" hidden>
+    <button role="menuitem">Edit</button>
+    <button role="menuitem">Archive</button>
+</div>
+```
+
+```typescript
+import { createPopoverController } from '@inertiaui/vanilla'
+
+const trigger = document.querySelector<HTMLElement>('#trigger')!
+const menu = document.querySelector<HTMLElement>('#menu')!
+const controller = createPopoverController({
+    reference: () => trigger,
+    popover: () => menu,
+    position: { placement: 'bottom-start', offset: 8 },
+    menu: true,
+    onOpenChange(open) {
+        trigger.setAttribute('aria-expanded', String(open))
+        menu.hidden = !open
+        if (open) queueMicrotask(() => controller.mount())
+    },
+})
+
+if (controller.native) menu.setAttribute('popover', 'auto')
+trigger.addEventListener('pointerdown', controller.onPointerDown)
+trigger.addEventListener('click', controller.toggle)
+trigger.addEventListener('keydown', controller.onKeydown)
+trigger.addEventListener('focusout', controller.onFocusOut)
+
+// On disposal, also remove the four trigger listeners if the trigger remains in the DOM.
+// The caller owns rendering and removing the panel.
+controller.cleanup()
+```
+
+In Vue, call `mount()` after the open panel has rendered with `nextTick()`. In React, call it from a layout effect and return `cleanup()` from that effect. Cleanup preserves logical open state so an effect can safely clean up and remount. It hides the native panel and removes the controller's listeners, timers, positioning observers, menu navigation, and mount-hook resources. Use `close()` for a state change and a close notification.
+
+Keep native panels in their original DOM ancestry: the browser places them in the top layer without losing CSS inheritance. Fallback panels need a suitable DOM container; inside a modal dialog, keep them within that dialog. The controller does not move elements, assign classes, copy theme tokens, or animate. Set the panel's `role`, trigger ARIA attributes, and `popover="auto"` when `native` is true. Without `menu: true`, callers choose initial panel focus through `onOpened`.
+
+| Option | Description |
+|--------|-------------|
+| `reference`, `popover` | Getters returning the current elements or `null` while unmounted |
+| `position` | `TopLayerPopoverPositionOptions`; getters can supply current placement and offset |
+| `menu` | Enables menu navigation, ArrowDown/ArrowUp opening, and closing after a menu-item click |
+| `onOpenChange(open)` | Updates the framework's rendering state |
+| `onMount({ reference, popover, native })` | Applies consumer behavior after positioning; may return a cleanup function |
+| `onOpened()` | Runs after the panel is mounted and its handlers are installed |
+| `onClosed()` | Runs when explicitly closed or dismissed; cleanup alone does not call it |
+
+The controller resolves top/bottom `start` and `end` placement against the reference element's computed direction, including local RTL scopes. It follows scrolling and resizing, constrains panels to the viewport, restores trigger focus on Escape, and preserves focus when the user moves to another control. Menu clicks finish bubbling before dismissal, allowing framework-delegated item handlers to run. ArrowUp opens at the last enabled item with a matching roving tab stop.
+
+| Controller member | Description |
+|-------------------|-------------|
+| `native`, `isOpen` | Read-only native support and current logical open state |
+| `open()`, `close(restoreFocus?)` | Change open state; `close()` normally restores focus only when focus is inside the panel or on the body |
+| `toggle(event?)` | Toggles state; pass the click event together with the pointerdown handler to avoid reopening after native light dismissal |
+| `mount()` | Attaches behavior after rendering the open panel |
+| `cleanup()` | Detaches behavior without changing logical open state |
+| `onPointerDown`, `onKeydown`, `onFocusOut` | Handlers to bind to the trigger |
+
+Consumer-specific theme or animation behavior can live in `onMount`. Return its cleanup so it also runs when a panel is dismissed, unmounted, or remounted. Use `prefersReducedMotion()` before starting consumer animations.
+
+### Low-level native disclosure
 
 `createNativePopoverDisclosure` coordinates open state, native `showPopover()`/`hidePopover()`, top-layer positioning, auto-updates, toggle-event sync, and optional focus-out dismissal.
 
@@ -1587,6 +1657,9 @@ import type {
     ListboxNavigationOptions,
     ListboxNavigationResult,
     MenuNavigationOptions,
+    PopoverController,
+    PopoverControllerOptions,
+    PopoverMountContext,
     NativePopoverCloseOptions,
     NativePopoverDisclosureController,
     NativePopoverDisclosureOptions,

@@ -53,6 +53,9 @@ export type {
 
 export { focusFirstEnabledElement } from './focus'
 
+export { createPopoverController } from './popover'
+export type { PopoverController, PopoverControllerOptions, PopoverMountContext } from './popover'
+
 export { createNativePopoverDisclosure } from './nativePopover'
 export type {
     NativePopoverCloseOptions,
