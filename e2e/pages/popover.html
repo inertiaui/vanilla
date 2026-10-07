@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Popover Controller</title>
+        <style>
+            dialog {
+                width: min(80vw, 600px);
+                --surface: rgb(210, 220, 230);
+            }
+            #scroller {
+                height: 240px;
+                overflow: auto;
+                padding: 16px;
+            }
+            #container {
+                margin-top: 32px;
+            }
+            #reference {
+                width: 130px;
+                height: 32px;
+            }
+            #panel {
+                background: var(--surface);
+                width: 180px;
+                padding: 8px;
+            }
+            #panel button {
+                display: block;
+                min-height: 32px;
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <button id="open-dialog">Open dialog</button>
+        <dialog>
+            <div id="scroller">
+                <div id="container"><button id="reference">Open menu</button></div>
+                <button id="outside">Outside</button>
+                <div style="height: 600px"></div>
+            </div>
+        </dialog>
+        <output id="state">false</output>
+        <script type="module">
+            import { createPopoverController } from '../../src/index.ts'
+
+            const params = new URL(location.href).searchParams
+            if (params.has('fallback')) delete HTMLElement.prototype.showPopover
+            const menu = !params.has('input')
+            const dialog = document.querySelector('dialog')
+            const reference = document.querySelector('#reference')
+            const container = document.querySelector('#container')
+            let panel = null
+            let mounts = 0
+            let cleanups = 0
+            const events = []
+            const errors = []
+            window.addEventListener('error', (event) => errors.push(String(event.error)))
+            window.addEventListener('unhandledrejection', (event) => errors.push(String(event.reason)))
+
+            const controller = createPopoverController({
+                reference: () => reference,
+                popover: () => panel,
+                position: { placement: 'bottom-start', offset: 8 },
+                menu,
+                onOpenChange(open) {
+                    document.querySelector('#state').textContent = String(open)
+                    queueMicrotask(() => {
+                        if (!controller.isOpen) {
+                            panel?.remove()
+                            panel = null
+                            return
+                        }
+                        panel = document.createElement('div')
+                        panel.id = 'panel'
+                        panel.role = menu ? 'menu' : 'dialog'
+                        if (controller.native) panel.setAttribute('popover', 'auto')
+                        panel.innerHTML = menu
+                            ? '<button role="menuitem" id="first">First</button><button role="menuitem" disabled>Disabled</button><button role="menuitem" id="last">Last</button>'
+                            : '<input aria-label="Search" />'
+                        container.append(panel)
+                        controller.mount()
+                    })
+                },
+                onMount() {
+                    mounts++
+                    return () => cleanups++
+                },
+                onOpened() {
+                    if (!menu) panel.querySelector('input').focus()
+                },
+                onClosed() {
+                    events.push('closed')
+                },
+            })
+
+            reference.addEventListener('pointerdown', controller.onPointerDown)
+            reference.addEventListener('click', controller.toggle)
+            reference.addEventListener('keydown', controller.onKeydown)
+            reference.addEventListener('focusout', controller.onFocusOut)
+            document.querySelector('#open-dialog').onclick = () => dialog.showModal()
+            document.addEventListener('click', (event) => {
+                if (event.target.closest('[role="menuitem"]')) events.push('item')
+            })
+
+            window.popoverDemo = {
+                controller,
+                metrics: () => ({ mounts, cleanups, events, errors, open: controller.isOpen }),
+            }
+        </script>
+    </body>
+</html>

@@ -5,6 +5,7 @@ export interface MenuNavigationOptions {
     orientation?: 'vertical' | 'horizontal'
     loop?: boolean
     typeAhead?: boolean
+    initialFocus?: 'first' | 'last'
     onActivate?: (item: HTMLElement) => void
 }
 
@@ -14,6 +15,7 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
         orientation = 'vertical',
         loop = true,
         typeAhead = true,
+        initialFocus = 'first',
         onActivate,
     } = options
 
@@ -124,16 +126,17 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
 
     container.addEventListener('keydown', handleKeyDown)
 
-    // Initialize roving tabindex: first item gets tabindex="0", rest get "-1"
+    // Initialize the tab stop to match the item that will receive focus.
     const items = getItems()
-    items.forEach((el, i) => el.setAttribute('tabindex', i === 0 ? '0' : '-1'))
+    const initialIndex = initialFocus === 'last' ? items.length - 1 : 0
+    items.forEach((el, i) => el.setAttribute('tabindex', i === initialIndex ? '0' : '-1'))
 
-    // Focus first item
+    // Defer focus until the caller has rendered the menu.
     let rafId: number | undefined
     if (items.length > 0) {
         rafId = requestAnimationFrame(() => {
             rafId = undefined
-            items[0].focus()
+            items[initialIndex].focus()
         })
     }
 
