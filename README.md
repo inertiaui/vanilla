@@ -26,6 +26,9 @@ npm install @inertiaui/vanilla
 - [Reorder](#reorder)
 - [Positioning](#positioning)
 - [Native Popovers](#native-popovers)
+- [Tooltip Controllers](#tooltip-controllers)
+- [Dialog Controllers](#dialog-controllers)
+- [CSS Variable Inheritance](#css-variable-inheritance)
 - [Accessibility](#accessibility)
 - [Animation](#animation)
 - [Dark Mode Detection](#dark-mode-detection)
@@ -151,7 +154,7 @@ Elements with `aria-hidden="true"` are excluded. (Elements with `disabled` are a
 
 ### focusFirstEnabledElement
 
-Focuses the first non-disabled element in a list of candidates. Nullish values are ignored, and the function returns whether anything was focused.
+Focuses the first non-disabled element in a list of candidates. Nullish values are ignored, and the function returns whether anything was focused. An optional second argument accepts native `FocusOptions`, including `{ preventScroll: true }`.
 
 ```typescript
 import { focusFirstEnabledElement } from '@inertiaui/vanilla'
@@ -816,6 +819,69 @@ popover.addEventListener('focusout', (event) => {
 | `startAutoUpdate()` | Starts `autoUpdateTopLayerPopover` |
 | `cleanupPopover()` | Cleans focus-out and positioning listeners |
 
+## Tooltip Controllers
+
+`createTooltipController(options)` coordinates hover and focus intent, delayed opening, positioning, Escape dismissal, and cleanup. It never moves focus. It keeps a tooltip open while either pointer or keyboard focus remains in its trigger, and ignores completion of an obsolete closing transition.
+
+```ts
+import { createTooltipController } from '@inertiaui/vanilla'
+
+const tooltip = createTooltipController({
+    reference: () => triggerElement,
+    tooltip: () => tooltipElement,
+    enabled: () => Boolean(text),
+    delay: () => delay,
+    position: { placement: 'top', offset: 6 },
+    onOpenChange: (open) => setVisible(open),
+})
+```
+
+Bind `onMouseEnter`, `onMouseLeave`, `onFocusIn`, and `onFocusOut` to the trigger. After rendering the tooltip, call `mount()`. Call `cleanup()` before removing its DOM or disposing its owner; call `hide()` to dismiss it. `isOpen` and `native` are readonly values, not framework reactive state. Bridge changes through `onOpenChange`.
+
+Render native tooltips with `popover="manual"` and `role="tooltip"`, ideally within the trigger's DOM ancestry. For fallback tooltips, choose the portal destination yourself (inside any surrounding modal) and supply appropriate positioning/stacking styles. CSS width limits are preserved. Supply a stable tooltip ID and connect the trigger's `aria-describedby` while visible.
+
+Optional `onMount({ reference, popover, native })` can return a cleanup callback. `transition(visible)` can return a promise; hiding waits for it. The consumer owns animation styles, cancellation, and reduced-motion policy. `cleanup()` cancels delayed opening and removes mounted behavior while preserving logical open state, so a framework can replay `mount()` safely.
+
+## Dialog Controllers
+
+`createDialogController(options)` adds native modal behavior, or a focus-trapped fallback when `showModal` is unavailable. It balances scroll locks, restores focus, and restricts fallback Escape handling to the top dialog. The fallback marks siblings along the dialog ancestry inert, preserving accessibility of the dialog itself.
+
+```ts
+import { createDialogController } from '@inertiaui/vanilla'
+
+const dialog = createDialogController({
+    dialog: () => dialogElement,
+    panel: () => panelElement,
+    onOpenChange: (open) => setVisible(open),
+    onCancel: () => requestCancel(),
+})
+
+dialog.open()
+// After rendering:
+dialog.mount()
+// Close and await any supplied transition:
+await dialog.close()
+```
+
+Use `<dialog>` when `native` is true. Otherwise render a container with `role="dialog"`, `aria-modal="true"`, a backdrop, and appropriate styles. Supply accessible labels in either case. The controller calls `onCancel` for Escape; the consumer decides whether to close, so controlled components can honor their existing cancellation contract.
+
+`transition(visible)` and `onMount({ dialog, panel, native })` follow the same transition/cleanup contract as tooltips. Reopening during a closing transition keeps the dialog open. Call `cleanup()` before removing DOM or disposing the owner. It releases mounted behavior without changing logical `isOpen`, allowing framework effect replay. Call `close()` for an actual state change.
+
+## CSS Variable Inheritance
+
+`inheritCssVariables(source, target, { filter, mediaQueries })` copies selected computed custom properties to a portal and returns a cleanup function. It watches ancestor class/style changes and the supplied media queries. Cleanup restores prior inline values and priorities when its own value is still present; consumer value overrides are preserved.
+
+```ts
+import { inheritCssVariables } from '@inertiaui/vanilla'
+
+const cleanup = inheritCssVariables(trigger, portal, {
+    filter: (name) => name.startsWith('--my-component-'),
+    mediaQueries: ['(prefers-color-scheme: dark)'],
+})
+```
+
+The helper is intentionally scoped to caller-selected variables. It does not observe stylesheet edits, arbitrary attribute selectors, or reparenting: remount it when the source ancestry changes. Native top-layer elements retain ordinary DOM inheritance and generally do not need this helper.
+
 ## Accessibility
 
 Accessibility utilities for managing `aria-hidden` attributes with reference counting support.
@@ -1156,7 +1222,9 @@ Create a timeout-based debouncer with an explicit millisecond delay. This is use
 ```typescript
 import { createDebouncer } from '@inertiaui/vanilla'
 
-const debouncer = createDebouncer(250)
+// A number or a getter evaluated for each new schedule.
+let delay = 250
+const debouncer = createDebouncer(() => delay)
 
 input.addEventListener('input', () => {
     debouncer.schedule(() => {
@@ -1167,6 +1235,8 @@ input.addEventListener('input', () => {
 // Cancel a pending scheduled call
 debouncer.cancel()
 ```
+
+`pending` is readonly and true only while a callback is scheduled. Both cancellation and callback dispatch clear it.
 
 ### detectFramerate
 

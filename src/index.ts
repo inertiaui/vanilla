@@ -101,3 +101,11 @@ export {
     formatColor,
 } from './color'
 export type { HslColor, ColorFormat, RgbColor, ParsedColor, FormatColorOptions } from './color'
+
+export { inheritCssVariables } from './cssVariables'
+export type { CssVariableInheritanceOptions } from './cssVariables'
+
+export { createTooltipController } from './tooltip'
+export type { TooltipController, TooltipControllerOptions } from './tooltip'
+export { createDialogController } from './modalDialog'
+export type { DialogController, DialogControllerOptions, DialogMountContext } from './modalDialog'
