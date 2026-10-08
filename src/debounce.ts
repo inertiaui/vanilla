@@ -23,6 +23,8 @@ export function debounce<T extends (...args: unknown[]) => void>(fn: T): (...arg
  * call and queues a fresh one `delay` milliseconds out.
  */
 export interface Debouncer {
+    /** Whether a scheduled callback is waiting to run. */
+    readonly pending: boolean
     /** Queue `fn` to run after `delay` ms, cancelling any pending call. */
     schedule(fn: () => void): void
     /** Cancel a pending call, if any. */
@@ -30,11 +32,11 @@ export interface Debouncer {
 }
 
 /**
- * Create a {@link Debouncer} with a fixed delay.
+ * Create a {@link Debouncer} with a fixed delay or a getter read on each schedule.
  *
  * @param delay - Milliseconds to wait after the latest `schedule()` call.
  */
-export function createDebouncer(delay: number): Debouncer {
+export function createDebouncer(delay: number | (() => number)): Debouncer {
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const cancel = () => {
@@ -46,13 +48,22 @@ export function createDebouncer(delay: number): Debouncer {
 
     const schedule = (fn: () => void) => {
         cancel()
-        timer = setTimeout(() => {
-            timer = null
-            fn()
-        }, delay)
+        timer = setTimeout(
+            () => {
+                timer = null
+                fn()
+            },
+            typeof delay === 'function' ? delay() : delay,
+        )
     }
 
-    return { schedule, cancel }
+    return {
+        schedule,
+        cancel,
+        get pending() {
+            return timer !== null
+        },
+    }
 }
 
 /**

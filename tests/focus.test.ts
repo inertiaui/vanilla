@@ -51,4 +51,12 @@ describe('focusFirstEnabledElement', () => {
 
         disabled.remove()
     })
+    it('forwards focus options to the first enabled control', () => {
+        const disabled = document.createElement('input')
+        disabled.disabled = true
+        const enabled = document.createElement('input')
+        const focus = vi.spyOn(enabled, 'focus')
+        expect(focusFirstEnabledElement([disabled, enabled], { preventScroll: true })).toBe(true)
+        expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    })
 })

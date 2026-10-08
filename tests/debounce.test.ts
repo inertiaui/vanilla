@@ -42,4 +42,23 @@ describe('createDebouncer', () => {
 
         expect(fn).not.toHaveBeenCalled()
     })
+    it('reads the current delay when scheduling and reports pending work', () => {
+        let delay = 200
+        const d = createDebouncer(() => delay)
+        const fn = vi.fn(() => expect(d.pending).toBe(false))
+        expect(d.pending).toBe(false)
+        d.schedule(fn)
+        expect(d.pending).toBe(true)
+        vi.advanceTimersByTime(100)
+        expect(fn).not.toHaveBeenCalled()
+        delay = 50
+        d.schedule(fn)
+        vi.advanceTimersByTime(49)
+        expect(fn).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(1)
+        expect(fn).toHaveBeenCalledTimes(1)
+        d.schedule(fn)
+        d.cancel()
+        expect(d.pending).toBe(false)
+    })
 })

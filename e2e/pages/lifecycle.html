@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Overlay lifecycle helpers</title>
+        <style>
+            body {
+                margin: 40px;
+            }
+            #scope {
+                --demo-color: rgb(210, 220, 230);
+                padding: 30px;
+            }
+            .tooltip {
+                width: max-content;
+                max-width: 180px;
+                box-sizing: border-box;
+                background: var(--demo-color);
+                padding: 8px;
+                margin: 0;
+                pointer-events: none;
+            }
+            .modal {
+                background: white;
+                padding: 20px;
+            }
+            div.modal {
+                position: fixed;
+                inset: 20%;
+                z-index: 10;
+            }
+            button {
+                margin: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="holder">
+            <div id="scope"><button id="trigger">Tooltip target</button></div>
+        </div>
+        <button id="outside">Outside</button><button id="open-dialog">Open dialog</button>
+        <div id="copied" style="--demo-color: old !important"></div>
+        <script type="module">
+            import {
+                createTooltipController,
+                createDialogController,
+                inheritCssVariables,
+                animate,
+                cancelAnimations,
+            } from '../../src/index.ts'
+            const fallback = new URL(location.href).searchParams.has('fallback')
+            if (fallback) {
+                delete HTMLElement.prototype.showPopover
+                Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { value: undefined })
+            }
+            const scope = document.querySelector('#scope')
+            const trigger = document.querySelector('#trigger')
+            let tooltip = null
+            const errors = []
+            window.addEventListener('error', (e) => errors.push(String(e.error)))
+            window.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)))
+            const tip = createTooltipController({
+                reference: () => trigger,
+                tooltip: () => tooltip,
+                delay: 20,
+                onOpenChange(open) {
+                    queueMicrotask(() => {
+                        if (!tip.isOpen) {
+                            tooltip?.remove()
+                            tooltip = null
+                            return
+                        }
+                        tooltip = document.createElement('div')
+                        tooltip.role = 'tooltip'
+                        tooltip.className = 'tooltip'
+                        tooltip.textContent =
+                            'A long tooltip that must keep its consumer CSS width limits and wrap over multiple lines.'
+                        if (tip.native) tooltip.setAttribute('popover', 'manual')
+                        scope.append(tooltip)
+                        tip.mount()
+                    })
+                },
+                transition(visible) {
+                    if (!tooltip) return
+                    cancelAnimations(tooltip)
+                    return animate(tooltip, [{ opacity: visible ? 0 : 1 }, { opacity: visible ? 1 : 0 }], {
+                        duration: 60,
+                    })
+                },
+                onMount:
+                    ({ popover }) =>
+                    () =>
+                        cancelAnimations(popover),
+            })
+            trigger.addEventListener('mouseenter', tip.onMouseEnter)
+            trigger.addEventListener('mouseleave', tip.onMouseLeave)
+            trigger.addEventListener('focusin', tip.onFocusIn)
+            trigger.addEventListener('focusout', tip.onFocusOut)
+            function makeDialog(name) {
+                let element = null
+                let panel = null
+                let mounts = 0
+                let cleanups = 0
+                const controller = createDialogController({
+                    dialog: () => element,
+                    panel: () => panel,
+                    onOpenChange(open) {
+                        queueMicrotask(() => {
+                            if (!controller.isOpen) {
+                                if (name === 'outer') document.querySelector('#holder').append(scope)
+                                element?.remove()
+                                element = null
+                                panel = null
+                                return
+                            }
+                            element = document.createElement(controller.native ? 'dialog' : 'div')
+                            element.id = name
+                            element.className = 'modal'
+                            element.role = 'dialog'
+                            element.setAttribute('aria-modal', 'true')
+                            panel = document.createElement('div')
+                            panel.innerHTML = `<button class="cancel">Cancel ${name}</button>`
+                            panel.querySelector('button').onclick = () => controller.close()
+                            if (name === 'outer') panel.append(scope)
+                            element.append(panel)
+                            document.body.append(element)
+                            controller.mount()
+                        })
+                    },
+                    onCancel: () => controller.close(),
+                    onMount: () => {
+                        mounts++
+                        return () => {
+                            cleanups++
+                            if (panel) cancelAnimations(panel)
+                        }
+                    },
+                    transition(visible) {
+                        if (!panel) return
+                        cancelAnimations(panel)
+                        return animate(panel, [{ opacity: visible ? 0 : 1 }, { opacity: visible ? 1 : 0 }], {
+                            duration: 80,
+                        })
+                    },
+                })
+                return { controller, counts: () => ({ mounts, cleanups }) }
+            }
+            const outer = makeDialog('outer')
+            const inner = makeDialog('inner')
+            document.querySelector('#open-dialog').onclick = outer.controller.open
+            let releaseTheme = inheritCssVariables(scope, document.querySelector('#copied'), {
+                filter: (name) => name.startsWith('--demo-'),
+            })
+            window.lifecycle = { tip, outer, inner, errors, releaseTheme }
+        </script>
+    </body>
+</html>
