@@ -153,92 +153,87 @@ function isHTMLElement(value: unknown): value is HTMLElement {
     return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement
 }
 
-function getValidReorderHitBoxes(hitBoxes: readonly ReorderHitBox[]): ReorderHitBox[] {
-    return hitBoxes.filter(
-        (hitBox) =>
-            Number.isFinite(hitBox.index) &&
-            Number.isFinite(hitBox.left) &&
-            Number.isFinite(hitBox.top) &&
-            Number.isFinite(hitBox.right) &&
-            Number.isFinite(hitBox.bottom) &&
-            hitBox.left <= hitBox.right &&
-            hitBox.top <= hitBox.bottom,
-    )
-}
-
-function getOrderedReorderHitBoxes(hitBoxes: readonly ReorderHitBox[]): ReorderHitBox[] {
-    return getValidReorderHitBoxes(hitBoxes).sort((first, second) => first.index - second.index)
-}
-
 /**
- * Given the on-screen hit boxes of each item and a pointer position, resolve the
- * insertion index (0..count) the pointer currently maps to, or `null` when the
- * point falls outside the combined bounds. Handles both single-column (vertical
- * midpoint) and multi-item rows (horizontal midpoint) layouts.
+ * Resolve the insertion index for vertical lists and multi-item rows. Select
+ * the first matching item by index (or left edge within a row) in one pass,
+ * without sorting or allocating temporary arrays on every pointer move.
  */
 function getInsertionIndexFromPoint(
     hitBoxes: readonly ReorderHitBox[],
     point: ReorderPoint,
     options: ReorderInsertionOptions = {},
 ): number | null {
-    const orderedHitBoxes = getOrderedReorderHitBoxes(hitBoxes)
+    let left = Infinity
+    let top = Infinity
+    let right = -Infinity
+    let bottom = -Infinity
+    let firstIndex = Infinity
+    let lastIndex = -Infinity
+    let verticalIndex = Infinity
+    let rowCount = 0
+    let rowMatch: ReorderHitBox | null = null
+    let rowLast: ReorderHitBox | null = null
 
-    if (orderedHitBoxes.length === 0) {
-        return null
-    }
+    for (const hitBox of hitBoxes) {
+        if (
+            !Number.isFinite(hitBox.index) ||
+            !Number.isFinite(hitBox.left) ||
+            !Number.isFinite(hitBox.top) ||
+            !Number.isFinite(hitBox.right) ||
+            !Number.isFinite(hitBox.bottom) ||
+            hitBox.left > hitBox.right ||
+            hitBox.top > hitBox.bottom
+        ) {
+            continue
+        }
 
-    const left = Math.min(...orderedHitBoxes.map((hitBox) => hitBox.left))
-    const top = Math.min(...orderedHitBoxes.map((hitBox) => hitBox.top))
-    const right = Math.max(...orderedHitBoxes.map((hitBox) => hitBox.right))
-    const bottom = Math.max(...orderedHitBoxes.map((hitBox) => hitBox.bottom))
-    const bounds = options.bounds
-    const activeLeft = bounds ? Math.min(left, bounds.left) : left
-    const activeTop = bounds ? Math.min(top, bounds.top) : top
-    const activeRight = bounds ? Math.max(right, bounds.right) : right
-    const activeBottom = bounds ? Math.max(bottom, bounds.bottom) : bottom
+        left = Math.min(left, hitBox.left)
+        top = Math.min(top, hitBox.top)
+        right = Math.max(right, hitBox.right)
+        bottom = Math.max(bottom, hitBox.bottom)
+        firstIndex = Math.min(firstIndex, hitBox.index)
+        lastIndex = Math.max(lastIndex, hitBox.index)
 
-    if (
-        point.clientX < activeLeft ||
-        point.clientX > activeRight ||
-        point.clientY < activeTop ||
-        point.clientY > activeBottom
-    ) {
-        return null
-    }
+        if (point.clientY <= hitBox.top + (hitBox.bottom - hitBox.top) / 2) {
+            // Equivalent to the first vertical midpoint in item-index order.
+            verticalIndex = Math.min(verticalIndex, hitBox.index)
+        }
 
-    if (point.clientY < top) {
-        return orderedHitBoxes[0].index
-    }
-
-    if (point.clientY > bottom) {
-        return orderedHitBoxes[orderedHitBoxes.length - 1].index + 1
-    }
-
-    const hitBoxesOnCurrentRow = orderedHitBoxes
-        .filter((hitBox) => point.clientY >= hitBox.top && point.clientY <= hitBox.bottom)
-        .sort((first, second) => first.left - second.left || first.index - second.index)
-
-    if (hitBoxesOnCurrentRow.length > 1) {
-        for (const hitBox of hitBoxesOnCurrentRow) {
-            const midpoint = hitBox.left + (hitBox.right - hitBox.left) / 2
-
-            if (point.clientX <= midpoint) {
-                return hitBox.index
+        if (point.clientY >= hitBox.top && point.clientY <= hitBox.bottom) {
+            // Rows use visual left-to-right order, with item index breaking ties.
+            rowCount++
+            if (
+                !rowLast ||
+                hitBox.left > rowLast.left ||
+                (hitBox.left === rowLast.left && hitBox.index > rowLast.index)
+            ) {
+                rowLast = hitBox
+            }
+            if (
+                point.clientX <= hitBox.left + (hitBox.right - hitBox.left) / 2 &&
+                (!rowMatch ||
+                    hitBox.left < rowMatch.left ||
+                    (hitBox.left === rowMatch.left && hitBox.index < rowMatch.index))
+            ) {
+                rowMatch = hitBox
             }
         }
-
-        return hitBoxesOnCurrentRow[hitBoxesOnCurrentRow.length - 1].index + 1
     }
 
-    for (const hitBox of orderedHitBoxes) {
-        const midpoint = hitBox.top + (hitBox.bottom - hitBox.top) / 2
+    if (firstIndex === Infinity) return null
+    const bounds = options.bounds
+    if (
+        point.clientX < (bounds ? Math.min(left, bounds.left) : left) ||
+        point.clientX > (bounds ? Math.max(right, bounds.right) : right) ||
+        point.clientY < (bounds ? Math.min(top, bounds.top) : top) ||
+        point.clientY > (bounds ? Math.max(bottom, bounds.bottom) : bottom)
+    )
+        return null
 
-        if (point.clientY <= midpoint) {
-            return hitBox.index
-        }
-    }
-
-    return orderedHitBoxes[orderedHitBoxes.length - 1].index + 1
+    if (point.clientY < top) return firstIndex
+    if (point.clientY > bottom) return lastIndex + 1
+    if (rowCount > 1) return rowMatch ? rowMatch.index : rowLast!.index + 1
+    return verticalIndex === Infinity ? lastIndex + 1 : verticalIndex
 }
 
 /**
@@ -603,6 +598,8 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
 }
 
 interface PointerReorderOptions {
+    /** Capture drag geometry only after the initiating pointer has been accepted. */
+    onStart: () => void
     /**
      * Return the current hit boxes for every reorderable item. Called on each
      * pointer move and auto-scroll frame so callers can measure fresh
@@ -743,6 +740,9 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
     }
 
     const pointerReorder = createPointerReorder({
+        onStart: () => {
+            dragHitBoxes = measureItemHitBoxes()
+        },
         getItemCount: itemCount,
         getHitBoxes,
         getBounds,
@@ -808,14 +808,7 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
                 alreadyPreviewed: false,
             })
         },
-        pointerDown: (index, event) => {
-            dragHitBoxes = measureItemHitBoxes()
-            pointerReorder.pointerDown(index, event)
-
-            if (!event.defaultPrevented) {
-                dragHitBoxes = null
-            }
-        },
+        pointerDown: pointerReorder.pointerDown,
         cleanup: () => {
             pointerReorder.cleanup()
             dragHitBoxes = null
@@ -1002,6 +995,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
             return
         }
 
+        options.onStart()
         event.preventDefault()
         const captureElement = bindPointerCapture(handle, event.pointerId)
         activePointer = {

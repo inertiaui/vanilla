@@ -26,14 +26,12 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
         return Array.from(container.querySelectorAll<HTMLElement>(itemSelector))
     }
 
-    function getActiveIndex(): number {
-        const items = getItems()
+    function getActiveIndex(items: HTMLElement[]): number {
         const focused = document.activeElement as HTMLElement
         return items.indexOf(focused)
     }
 
-    function focusItem(index: number) {
-        const items = getItems()
+    function focusItem(index: number, items: HTMLElement[]) {
         if (items.length === 0) {
             return
         }
@@ -45,44 +43,56 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
         const item = items[targetIndex]
 
         // Roving tabindex
-        items.forEach((el) => el.setAttribute('tabindex', '-1'))
-        item.setAttribute('tabindex', '0')
+        items.forEach((el) => {
+            const value = el === item ? '0' : '-1'
+            if (el.getAttribute('tabindex') !== value) {
+                el.setAttribute('tabindex', value)
+            }
+        })
         item.focus()
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-        const items = getItems()
-        if (items.length === 0) {
-            return
-        }
-
         const nextKey = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight'
         const prevKey = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft'
+        const typeAheadKey = typeAhead && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey
+        if (
+            event.key !== nextKey &&
+            event.key !== prevKey &&
+            event.key !== 'Home' &&
+            event.key !== 'End' &&
+            event.key !== 'Enter' &&
+            event.key !== ' ' &&
+            !typeAheadKey
+        )
+            return
+        const items = getItems()
+        if (items.length === 0) return
 
         switch (event.key) {
             case nextKey: {
                 event.preventDefault()
-                const currentIndex = getActiveIndex()
-                focusItem(currentIndex + 1)
+                const currentIndex = getActiveIndex(items)
+                focusItem(currentIndex + 1, items)
                 break
             }
 
             case prevKey: {
                 event.preventDefault()
-                const currentIndex = getActiveIndex()
-                focusItem(currentIndex - 1)
+                const currentIndex = getActiveIndex(items)
+                focusItem(currentIndex - 1, items)
                 break
             }
 
             case 'Home': {
                 event.preventDefault()
-                focusItem(0)
+                focusItem(0, items)
                 break
             }
 
             case 'End': {
                 event.preventDefault()
-                focusItem(items.length - 1)
+                focusItem(items.length - 1, items)
                 break
             }
 
@@ -98,7 +108,7 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
             }
 
             default: {
-                if (typeAhead && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                if (typeAheadKey) {
                     event.preventDefault()
                     typeAheadBuffer += event.key.toLowerCase()
 
@@ -116,7 +126,7 @@ export function createMenuNavigation(container: HTMLElement, options: MenuNaviga
 
                     if (match) {
                         const index = items.indexOf(match)
-                        focusItem(index)
+                        focusItem(index, items)
                     }
                 }
                 break

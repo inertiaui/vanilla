@@ -149,6 +149,13 @@ for (const fallback of [false, true]) {
 }
 
 test('syncs native light dismissal with one close callback', async ({ page }) => {
+    // Inputs receive pointer focus in every engine, including Safari on macOS.
+    await page.locator('#outside').evaluate((element) => {
+        const input = document.createElement('input')
+        input.id = element.id
+        input.style.cssText = 'width: 60px; margin-left: 250px'
+        element.replaceWith(input)
+    })
     await page.click('#open-dialog')
     await page.click('#reference')
     await expect(page.locator('#first')).toBeFocused()

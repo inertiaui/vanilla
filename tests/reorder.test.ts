@@ -29,6 +29,7 @@ function rect(left: number, top: number, right: number, bottom: number): DOMRect
 describe('createReorderableList', () => {
     afterEach(() => {
         vi.unstubAllGlobals()
+        vi.restoreAllMocks()
     })
 
     it('previews pointer order and commits the previewed move once', () => {
@@ -410,5 +411,170 @@ describe('createReorderableList', () => {
 
         controller.cleanup()
         container.remove()
+    })
+
+    it.each([
+        { name: 'first grid column', x: 20, y: 20, expected: 0 },
+        { name: 'second grid column', x: 45, y: 20, expected: 1 },
+        { name: 'third grid column', x: 95, y: 20, expected: 2 },
+        { name: 'after the first row', x: 140, y: 20, expected: 3 },
+        { name: 'gap between rows', x: 70, y: 45, expected: 3 },
+        { name: 'above the grid', x: 70, y: -10, expected: 0 },
+        { name: 'below the grid', x: 70, y: 100, expected: 6 },
+    ])('resolves $name without changing grid insertion semantics', ({ x, y, expected }) => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        const onChange = vi.fn()
+        const controller = createReorderableList({
+            getItems: () => [0, 1, 2, 3, 4, 5],
+            getBounds: () => ({ left: -10, top: -10, right: 150, bottom: 100 }),
+            onChange,
+        })
+        for (let index = 5; index >= 0; index--) {
+            const element = document.createElement('div')
+            const left = (index % 3) * 50
+            const top = Math.floor(index / 3) * 50
+            element.getBoundingClientRect = () => rect(left, top, left + 40, top + 40)
+            controller.setItemElement(index, element)
+        }
+        try {
+            controller.pointerDown(5, makeEvent('pointerdown', [handle], handle))
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX: x, clientY: y }))
+            expect(onChange).toHaveBeenLastCalledWith({
+                draggedIndex: 5,
+                insertionIndex: expected,
+                targetIndex: Math.min(expected, 5),
+            })
+        } finally {
+            controller.cleanup()
+        }
+    })
+
+    it('uses visual horizontal order and ignores invalid rectangles', () => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        const onChange = vi.fn()
+        const controller = createReorderableList({ getItems: () => [0, 1, 2, 3, 4], onChange })
+        const rectangles = [
+            rect(100, 0, 140, 40),
+            rect(0, 0, 40, 40),
+            rect(50, 0, 90, 40),
+            rect(NaN, 0, 1, 1),
+            rect(2, 0, 1, 1),
+        ]
+        rectangles.forEach((value, index) => {
+            const element = document.createElement('div')
+            element.getBoundingClientRect = () => value
+            controller.setItemElement(index, element)
+        })
+        try {
+            controller.pointerDown(4, makeEvent('pointerdown', [handle], handle))
+            for (const [clientX, expected] of [
+                [10, 1],
+                [60, 2],
+                [110, 0],
+                [140, 1],
+            ]) {
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX, clientY: 20 }))
+                expect(onChange).toHaveBeenLastCalledWith({
+                    draggedIndex: 4,
+                    insertionIndex: expected,
+                    targetIndex: expected,
+                })
+            }
+        } finally {
+            controller.cleanup()
+        }
+    })
+
+    it('does not repeatedly sort item rectangles during a drag', () => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        const onChange = vi.fn()
+        const controller = createReorderableList({ getItems: () => [0, 1, 2], onChange })
+        for (let index = 0; index < 3; index++) {
+            const element = document.createElement('div')
+            element.getBoundingClientRect = () => rect(0, index * 50, 100, index * 50 + 40)
+            controller.setItemElement(index, element)
+        }
+        try {
+            const sort = vi.spyOn(Array.prototype, 'sort')
+            controller.pointerDown(2, makeEvent('pointerdown', [handle], handle))
+            for (let i = 0; i < 20; i++) {
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX: 50, clientY: 10 }))
+            }
+            const sortCount = sort.mock.calls.length
+            sort.mockRestore()
+            expect(sortCount).toBeLessThanOrEqual(1)
+            expect(onChange).toHaveBeenCalledTimes(21)
+            expect(controller.getPreviewOrder()).toEqual([2, 0, 1])
+        } finally {
+            controller.cleanup()
+        }
+    })
+
+    it.each(['disabled', 'non-handle', 'secondary-button', 'non-primary', 'single-item', 'cleaned'])(
+        'does not measure rows for a %s pointer start',
+        (reason) => {
+            const handle = document.createElement('button')
+            if (reason !== 'non-handle') handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            const onChange = vi.fn()
+            const controller = createReorderableList({
+                getItems: () => (reason === 'single-item' ? [0] : [0, 1]),
+                canReorder: () => reason !== 'disabled',
+                onChange,
+            })
+            const measure = vi.fn(() => rect(0, 0, 100, 50))
+            const element = document.createElement('div')
+            element.getBoundingClientRect = measure
+            controller.setItemElement(0, element)
+            if (reason === 'cleaned') controller.cleanup()
+            try {
+                const event = makeEvent('pointerdown', [handle], handle, {
+                    button: reason === 'secondary-button' ? 2 : 0,
+                    isPrimary: reason !== 'non-primary',
+                })
+                controller.pointerDown(0, event)
+                expect(measure).not.toHaveBeenCalled()
+                expect(onChange).not.toHaveBeenCalled()
+                expect(event.defaultPrevented).toBe(false)
+            } finally {
+                controller.cleanup()
+            }
+        },
+    )
+
+    it('keeps the accepted drag snapshot when a second pointer start is rejected', () => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        let offset = 0
+        const measure = vi.fn((index: number) => rect(0, index * 50 + offset, 100, index * 50 + 40 + offset))
+        const onChange = vi.fn()
+        const onReorder = vi.fn()
+        const controller = createReorderableList({ getItems: () => [0, 1, 2], onChange, onReorder })
+        for (let index = 0; index < 3; index++) {
+            const element = document.createElement('div')
+            element.getBoundingClientRect = () => measure(index)
+            controller.setItemElement(index, element)
+        }
+        try {
+            controller.pointerDown(2, makeEvent('pointerdown', [handle], handle, { pointerId: 1 }))
+            expect(measure).toHaveBeenCalledTimes(3)
+            offset = 100
+            controller.pointerDown(1, makeEvent('pointerdown', [handle], handle, { pointerId: 2 }))
+            expect(measure).toHaveBeenCalledTimes(3)
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 10 }))
+            expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 2, insertionIndex: 0, targetIndex: 0 })
+            window.dispatchEvent(makeEvent('pointerup', [window], window, { pointerId: 1 }))
+            expect(onReorder).toHaveBeenCalledWith(
+                { item: 2, fromIndex: 2, toIndex: 0, source: 'pointer' },
+                { alreadyPreviewed: true },
+            )
+            // A later accepted gesture takes a fresh snapshot.
+            controller.pointerDown(1, makeEvent('pointerdown', [handle], handle, { pointerId: 3 }))
+            expect(measure).toHaveBeenCalledTimes(6)
+        } finally {
+            controller.cleanup()
+        }
     })
 })

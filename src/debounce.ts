@@ -88,6 +88,7 @@ export function detectFramerate(): Promise<number> {
                 const fps = Math.floor((1000 * 10) / (now - lastTime))
 
                 cancelAnimationFrame(rafId!)
+                clearTimeout(timeoutId)
 
                 // Cap at reasonable values (30-240 fps range)
                 resolve(Math.min(Math.max(fps, 30), 240))
@@ -100,7 +101,7 @@ export function detectFramerate(): Promise<number> {
         rafId = window.requestAnimationFrame(measure)
 
         // Safety timeout after 1 second
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
             if (rafId !== undefined) {
                 cancelAnimationFrame(rafId)
             }

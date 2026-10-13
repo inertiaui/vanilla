@@ -1,6 +1,6 @@
-import { createDebouncer } from './debounce'
+import { createDebouncer, type Debouncer } from './debounce'
 import type { CleanupFunction } from './dialog'
-import { createNativePopoverDisclosure } from './nativePopover'
+import { createNativePopoverDisclosure, type NativePopoverDisclosureController } from './nativePopover'
 import type { PopoverMountContext } from './popover'
 import {
     autoUpdateTopLayerPopover,
@@ -35,40 +35,46 @@ export interface TooltipController {
 /** Coordinates hover and focus intent without moving focus into the tooltip. */
 export function createTooltipController(options: TooltipControllerOptions): TooltipController {
     const native = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype
-    const scheduler = createDebouncer(options.delay ?? 300)
+    const delay = options.delay ?? 300
+    let scheduler: Debouncer | undefined
     let hovered = false
     let focused = false
     let closing = false
     let revision = 0
     let mounted: HTMLElement | null = null
     let cleanups: CleanupFunction[] = []
-    const disclosure = createNativePopoverDisclosure({
-        reference: options.reference,
-        popover: options.tooltip,
-        get position(): TopLayerPopoverPositionOptions {
-            return {
-                placement: 'top',
-                offset: 6,
-                ...options.position,
-            }
-        },
-        onOpenChange: options.onOpenChange,
-    })
+    // Keep closed tooltip controllers cheap when repeated across a large list.
+    // Snapshot callbacks at construction just as the eager disclosure does.
+    const reference = options.reference
+    const tooltip = options.tooltip
+    const onOpenChange = options.onOpenChange
+    let disclosure: NativePopoverDisclosureController | undefined
+
+    function getDisclosure(): NativePopoverDisclosureController {
+        return (disclosure ??= createNativePopoverDisclosure({
+            reference,
+            popover: tooltip,
+            get position(): TopLayerPopoverPositionOptions {
+                return { placement: 'top', offset: 6, ...options.position }
+            },
+            onOpenChange,
+        }))
+    }
 
     function cleanup() {
         revision++
         closing = false
-        scheduler.cancel()
+        scheduler?.cancel()
         cleanups.forEach((cleanup) => cleanup())
         cleanups = []
-        disclosure.cleanupPopover()
+        disclosure?.cleanupPopover()
         if (native && mounted?.matches(':popover-open')) mounted.hidePopover()
         mounted = null
     }
 
     async function hide() {
-        scheduler.cancel()
-        if (!disclosure.isOpen || closing) return
+        scheduler?.cancel()
+        if (!disclosure?.isOpen || closing) return
         closing = true
         const current = ++revision
         await options.transition?.(false)
@@ -83,9 +89,9 @@ export function createTooltipController(options: TooltipControllerOptions): Tool
             closing = false
             void options.transition?.(true)
         }
-        if (disclosure.isOpen) return
-        scheduler.schedule(() => {
-            if ((hovered || focused) && options.enabled?.() !== false) disclosure.openPopover()
+        if (disclosure?.isOpen) return
+        ;(scheduler ??= createDebouncer(delay)).schedule(() => {
+            if ((hovered || focused) && options.enabled?.() !== false) getDisclosure().openPopover()
         })
     }
 
@@ -96,7 +102,7 @@ export function createTooltipController(options: TooltipControllerOptions): Tool
     function mount() {
         const reference = options.reference()
         const tooltip = options.tooltip()
-        if (!disclosure.isOpen || !reference || !tooltip) return
+        if (!disclosure?.isOpen || !reference || !tooltip) return
         cleanup()
         mounted = tooltip
         if (native) tooltip.showPopover()
@@ -125,7 +131,7 @@ export function createTooltipController(options: TooltipControllerOptions): Tool
     return {
         native,
         get isOpen() {
-            return disclosure.isOpen
+            return disclosure?.isOpen ?? false
         },
         mount,
         cleanup,

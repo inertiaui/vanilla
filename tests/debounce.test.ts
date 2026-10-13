@@ -1,4 +1,4 @@
-import { createDebouncer } from '../src/debounce'
+import { createDebouncer, detectFramerate } from '../src/debounce'
 
 describe('createDebouncer', () => {
     beforeEach(() => vi.useFakeTimers())
@@ -60,5 +60,44 @@ describe('createDebouncer', () => {
         d.schedule(fn)
         d.cancel()
         expect(d.pending).toBe(false)
+    })
+})
+
+describe('detectFramerate cleanup', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => {
+        vi.clearAllTimers()
+        vi.useRealTimers()
+        vi.restoreAllMocks()
+    })
+
+    it('releases the fallback timer when frame sampling completes', async () => {
+        let nextFrame: FrameRequestCallback | undefined
+        let frameId = 0
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+            nextFrame = callback
+            return ++frameId
+        })
+        vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {})
+        const measured = detectFramerate()
+        expect(vi.getTimerCount()).toBe(1)
+        for (let index = 0; index <= 10; index++) {
+            const callback = nextFrame!
+            nextFrame = undefined
+            callback(index * 20)
+        }
+        expect(await measured).toBe(50)
+        expect(nextFrame).toBeUndefined()
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('resolves to 60 and cancels a stalled frame after the timeout', async () => {
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockReturnValue(123)
+        const cancel = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {})
+        const measured = detectFramerate()
+        vi.advanceTimersByTime(1000)
+        expect(await measured).toBe(60)
+        expect(cancel).toHaveBeenCalledWith(123)
+        expect(vi.getTimerCount()).toBe(0)
     })
 })
