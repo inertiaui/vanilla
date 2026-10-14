@@ -35,8 +35,9 @@ export function inheritCssVariables(
 
     function update() {
         const computed = view!.getComputedStyle(source)
-        const names = new Set<string>()
+        const values = new Map<string, string>()
 
+        // Computed styles are live. Finish reading before target writes invalidate styles.
         for (const name of Array.from(computed)) {
             if (!name.startsWith('--') || !options.filter(name)) {
                 continue
@@ -48,8 +49,10 @@ export function inheritCssVariables(
                 continue
             }
 
-            names.add(name)
+            values.set(name, value)
+        }
 
+        for (const [name, value] of values) {
             if (!original.has(name)) {
                 original.set(name, {
                     value: target.style.getPropertyValue(name),
@@ -58,13 +61,18 @@ export function inheritCssVariables(
             }
 
             if (applied.get(name) !== value) {
+                // WebKit does not replace an important custom property with a
+                // normal declaration until the original declaration is removed.
+                if (target.style.getPropertyPriority(name)) {
+                    target.style.removeProperty(name)
+                }
                 target.style.setProperty(name, value)
                 applied.set(name, value)
             }
         }
 
         for (const name of applied.keys()) {
-            if (!names.has(name)) {
+            if (!values.has(name)) {
                 restore(name)
             }
         }

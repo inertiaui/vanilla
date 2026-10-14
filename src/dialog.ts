@@ -5,7 +5,9 @@ const FOCUSABLE_SELECTORS = [
     'input:not([disabled])',
     'select:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
-].join(', ')
+]
+    .map((selector) => `${selector}:not([aria-hidden="true"])`)
+    .join(', ')
 
 let scrollLockCount = 0
 let originalOverflow = ''
@@ -24,8 +26,8 @@ export function lockScroll(): CleanupFunction {
         originalPaddingRight = document.body.style.paddingRight
         originalScrollbarGutter = document.documentElement.style.getPropertyValue('scrollbar-gutter')
 
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
         const canReserveScrollbarGutter = supportsScrollbarGutter()
+        const scrollbarWidth = canReserveScrollbarGutter ? 0 : window.innerWidth - document.documentElement.clientWidth
 
         if (canReserveScrollbarGutter) {
             document.documentElement.style.setProperty('scrollbar-gutter', 'stable')
@@ -65,14 +67,34 @@ function unlockScroll(): void {
     }
 }
 
-function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
-    if (!container) {
-        return []
+function getLastFocusableElement(container: HTMLElement): HTMLElement | null {
+    let element: Element | null = container.lastElementChild
+    let descend = true
+
+    // Most dialogs end with a control. Search backwards in document order without
+    // collecting every control, but bound JS traversal for long decorative tails.
+    // Query the live DOM on every event so inserted/disabled controls are respected.
+    for (let remaining = 32; element && remaining > 0; remaining--) {
+        if (descend && element.lastElementChild) {
+            element = element.lastElementChild
+            continue
+        }
+        if (element.matches(FOCUSABLE_SELECTORS)) {
+            return element as HTMLElement
+        }
+        if (element.previousElementSibling) {
+            element = element.previousElementSibling
+            descend = true
+        } else {
+            element = element.parentElement
+            if (element === container) return null
+            descend = false
+        }
     }
 
-    return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)).filter(
-        (el) => el.getAttribute('aria-hidden') !== 'true',
-    )
+    if (!element) return null
+    const elements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)
+    return elements[elements.length - 1] ?? null
 }
 
 export interface FocusTrapOptions {
@@ -112,24 +134,30 @@ function handleTrapKeyDown(event: KeyboardEvent) {
     }
 
     const { container } = focusTrapStack[focusTrapStack.length - 1]
-    const focusableElements = getFocusableElements(container)
-    if (focusableElements.length === 0) {
-        return
-    }
+    const activeElement = document.activeElement
+    const outside = !container.contains(activeElement)
 
-    const firstElement = focusableElements[0]
-    const lastElement = focusableElements[focusableElements.length - 1]
-
-    if (event.shiftKey) {
-        if (document.activeElement === firstElement || !container.contains(document.activeElement)) {
-            event.preventDefault()
-            lastElement.focus()
-        }
-    } else {
-        if (document.activeElement === lastElement || !container.contains(document.activeElement)) {
+    if (!event.shiftKey && outside) {
+        const firstElement = container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS)
+        if (firstElement) {
             event.preventDefault()
             firstElement.focus()
         }
+        return
+    }
+
+    if (event.shiftKey && !outside && activeElement !== container.querySelector(FOCUSABLE_SELECTORS)) {
+        return
+    }
+
+    const lastElement = getLastFocusableElement(container)
+    if (!lastElement) return
+    if (event.shiftKey) {
+        event.preventDefault()
+        lastElement.focus()
+    } else if (activeElement === lastElement) {
+        event.preventDefault()
+        container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS)?.focus()
     }
 }
 
@@ -140,10 +168,7 @@ function handleTrapFocusIn(event: FocusEvent) {
 
     const { container } = focusTrapStack[focusTrapStack.length - 1]
     if (!container.contains(event.target as Node)) {
-        const focusableElements = getFocusableElements(container)
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus({ preventScroll: true })
-        }
+        container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS)?.focus({ preventScroll: true })
     }
 }
 
@@ -171,6 +196,12 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
 
         // Focus went to void — recapture it
         queueMicrotask(() => {
+            // Cleanup or a newly opened trap may have transferred focus ownership
+            // since the blur event. Do not let stale recovery steal focus back.
+            if (cleaned || focusTrapStack[focusTrapStack.length - 1] !== entry) {
+                return
+            }
+
             if (container.contains(container.ownerDocument.activeElement)) {
                 return
             }
@@ -183,10 +214,7 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
                 return
             }
 
-            const focusableElements = getFocusableElements(container)
-            if (focusableElements.length > 0) {
-                focusableElements[0].focus({ preventScroll: true })
-            }
+            container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS)?.focus({ preventScroll: true })
         })
     }
 
@@ -196,13 +224,13 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
     if (initialFocus) {
         rafId = requestAnimationFrame(() => {
             rafId = undefined
+            if (focusTrapStack[focusTrapStack.length - 1] !== entry) {
+                return
+            }
             if (initialFocusElement && container.contains(initialFocusElement)) {
                 initialFocusElement.focus()
             } else {
-                const focusableElements = getFocusableElements(container)
-                if (focusableElements.length > 0) {
-                    focusableElements[0].focus()
-                }
+                container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS)?.focus()
             }
         })
     }
@@ -220,9 +248,13 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
 
         container.removeEventListener('focusout', handleFocusOut)
 
-        const index = focusTrapStack.indexOf(entry)
-        if (index >= 0) {
-            focusTrapStack.splice(index, 1)
+        if (focusTrapStack[focusTrapStack.length - 1] === entry) {
+            focusTrapStack.pop()
+        } else {
+            const index = focusTrapStack.indexOf(entry)
+            if (index >= 0) {
+                focusTrapStack.splice(index, 1)
+            }
         }
 
         if (focusTrapStack.length === 0) {
@@ -289,21 +321,19 @@ export function onEscapeKey(callback: (event: KeyboardEvent) => void, options: E
     }
 }
 
-interface AriaHiddenStackItem {
-    element: Element
+interface AriaHiddenState {
     originalValue: string | null
     count: number
 }
 
-interface InertStackItem {
-    element: HTMLElement
+interface InertState {
     originalAriaHidden: string | null
     originalInert: boolean
     count: number
 }
 
-const ariaHiddenStack: AriaHiddenStackItem[] = []
-const inertStack: InertStackItem[] = []
+const ariaHiddenStates = new WeakMap<Element, AriaHiddenState>()
+const inertStates = new WeakMap<HTMLElement, InertState>()
 
 type NativeInertElement = HTMLElement & { inert: boolean }
 
@@ -319,13 +349,13 @@ export function markAriaHidden(elementOrSelector: Element | string): CleanupFunc
         return function noop() {}
     }
 
-    const existingIndex = ariaHiddenStack.findIndex((item) => item.element === element)
+    const existing = ariaHiddenStates.get(element)
 
-    if (existingIndex >= 0) {
-        ariaHiddenStack[existingIndex].count++
+    if (existing) {
+        existing.count++
     } else {
         const originalValue = element.getAttribute('aria-hidden')
-        ariaHiddenStack.push({ element, originalValue, count: 1 })
+        ariaHiddenStates.set(element, { originalValue, count: 1 })
         element.setAttribute('aria-hidden', 'true')
     }
 
@@ -340,23 +370,23 @@ export function markAriaHidden(elementOrSelector: Element | string): CleanupFunc
 }
 
 function unmarkAriaHidden(element: Element): void {
-    const index = ariaHiddenStack.findIndex((item) => item.element === element)
+    const item = ariaHiddenStates.get(element)
 
-    if (index < 0) {
+    if (!item) {
         return
     }
 
-    ariaHiddenStack[index].count--
+    item.count--
 
-    if (ariaHiddenStack[index].count <= 0) {
-        const { originalValue } = ariaHiddenStack[index]
+    if (item.count <= 0) {
+        const { originalValue } = item
 
         if (originalValue === null) {
             element.removeAttribute('aria-hidden')
         } else {
             element.setAttribute('aria-hidden', originalValue)
         }
-        ariaHiddenStack.splice(index, 1)
+        ariaHiddenStates.delete(element)
     }
 }
 
@@ -370,16 +400,16 @@ export function markInert(elementOrSelector: HTMLElement | string): CleanupFunct
         return function noop() {}
     }
 
-    const existingIndex = inertStack.findIndex((item) => item.element === element)
+    const existing = inertStates.get(element)
 
-    if (existingIndex >= 0) {
-        inertStack[existingIndex].count++
+    if (existing) {
+        existing.count++
     } else {
         const originalAriaHidden = element.getAttribute('aria-hidden')
         const hasNativeInert = supportsNativeInert(element)
         const originalInert = hasNativeInert ? (element as NativeInertElement).inert : false
 
-        inertStack.push({ element, originalAriaHidden, originalInert, count: 1 })
+        inertStates.set(element, { originalAriaHidden, originalInert, count: 1 })
 
         if (hasNativeInert) {
             ;(element as NativeInertElement).inert = true
@@ -399,16 +429,16 @@ export function markInert(elementOrSelector: HTMLElement | string): CleanupFunct
 }
 
 function unmarkInert(element: HTMLElement): void {
-    const index = inertStack.findIndex((item) => item.element === element)
+    const item = inertStates.get(element)
 
-    if (index < 0) {
+    if (!item) {
         return
     }
 
-    inertStack[index].count--
+    item.count--
 
-    if (inertStack[index].count <= 0) {
-        const { originalAriaHidden, originalInert } = inertStack[index]
+    if (item.count <= 0) {
+        const { originalAriaHidden, originalInert } = item
 
         if (supportsNativeInert(element)) {
             ;(element as NativeInertElement).inert = originalInert
@@ -420,6 +450,6 @@ function unmarkInert(element: HTMLElement): void {
             element.setAttribute('aria-hidden', originalAriaHidden)
         }
 
-        inertStack.splice(index, 1)
+        inertStates.delete(element)
     }
 }

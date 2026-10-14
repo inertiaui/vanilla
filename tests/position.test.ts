@@ -14,6 +14,33 @@ describe('positionTopLayerPopover', () => {
         vi.unstubAllGlobals()
     })
 
+    it.each([false, true])(
+        'does not measure natural content size when flipping is disabled (anchors=%s)',
+        async (anchorPositioning) => {
+            vi.stubGlobal('CSS', { supports: vi.fn(supportsNonWebKitCss) })
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
+            Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
+            Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined })
+            const { positionTopLayerPopover } = await import('../src/position')
+            const reference = document.createElement('button')
+            const floating = document.createElement('div')
+            reference.getBoundingClientRect = () => rect(80, 120, 300, 160)
+            const measure = vi.spyOn(floating, 'getBoundingClientRect').mockReturnValue(rect(80, 164, 300, 364))
+            const measureWidth = vi.spyOn(floating, 'scrollWidth', 'get')
+            const measureHeight = vi.spyOn(floating, 'scrollHeight', 'get')
+            document.body.append(reference, floating)
+            const result = positionTopLayerPopover(reference, floating, {
+                flip: false,
+                matchReferenceWidth: true,
+                anchorPositioning,
+            })
+            expect(result).toEqual({ x: 80, y: 164, placement: 'bottom-start' })
+            expect(measure).toHaveBeenCalledTimes(1)
+            expect(measureWidth).not.toHaveBeenCalled()
+            expect(measureHeight).not.toHaveBeenCalled()
+        },
+    )
+
     it('falls back to manual positioning when CSS anchor sizing still overflows the viewport', async () => {
         vi.stubGlobal('CSS', {
             supports: vi.fn(supportsNonWebKitCss),

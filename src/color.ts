@@ -170,12 +170,12 @@ export function formatAlpha(number: number): string {
  * Accepts any input understood by {@link parseHexColor}; falls back to black on invalid input.
  */
 export function hexToRgb(hex: string): RgbColor {
-    const normalized = parseHexColor(hex)?.hex ?? '#000000'
+    const normalized = expandHex(hex) ?? '000000'
 
     return {
-        r: parseInt(normalized.slice(1, 3), 16),
-        g: parseInt(normalized.slice(3, 5), 16),
-        b: parseInt(normalized.slice(5, 7), 16),
+        r: parseInt(normalized.slice(0, 2), 16),
+        g: parseInt(normalized.slice(2, 4), 16),
+        b: parseInt(normalized.slice(4, 6), 16),
     }
 }
 
@@ -253,6 +253,19 @@ export function parsedFromHex(hex: string, alphaValue = 1): ParsedColor {
     }
 }
 
+function expandHex(input: string): string | null {
+    const match = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(input.trim())
+
+    if (!match) return null
+
+    const raw = match[1]
+    if (raw.length === 3 || raw.length === 4) {
+        const rgb = raw[0] + raw[0] + raw[1] + raw[1] + raw[2] + raw[2]
+        return raw.length === 4 ? rgb + raw[3] + raw[3] : rgb
+    }
+    return raw
+}
+
 /**
  * Parse a hex color string into a {@link ParsedColor}.
  *
@@ -260,19 +273,8 @@ export function parsedFromHex(hex: string, alphaValue = 1): ParsedColor {
  * 4/8 digit forms carry an alpha channel. Returns `null` on invalid input.
  */
 export function parseHexColor(input: string): ParsedColor | null {
-    const trimmed = input.trim()
-    const match = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(trimmed)
-
-    if (!match) return null
-
-    const raw = match[1]
-    const expanded =
-        raw.length === 3 || raw.length === 4
-            ? raw
-                  .split('')
-                  .map((char) => char + char)
-                  .join('')
-            : raw
+    const expanded = expandHex(input)
+    if (!expanded) return null
     const hex = `#${expanded.slice(0, 6)}`
     const alphaHex = expanded.length === 8 ? expanded.slice(6, 8) : null
 
@@ -285,7 +287,7 @@ export function parseHexColor(input: string): ParsedColor | null {
  */
 export function parseRgbColor(input: string): ParsedColor | null {
     const match =
-        /^rgba?\(\s*([+-]?\d*\.?\d+%?)\s*,\s*([+-]?\d*\.?\d+%?)\s*,\s*([+-]?\d*\.?\d+%?)(?:\s*,\s*([+-]?\d*\.?\d+%?))?\s*\)$/i.exec(
+        /^rgba?\(\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)%?)\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)%?)\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)%?)(?:\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)%?))?\s*\)$/i.exec(
             input.trim(),
         )
 
@@ -307,7 +309,7 @@ export function parseRgbColor(input: string): ParsedColor | null {
  */
 export function parseHslColor(input: string): ParsedColor | null {
     const match =
-        /^hsla?\(\s*([+-]?\d*\.?\d+)\s*,\s*([+-]?\d*\.?\d+)%\s*,\s*([+-]?\d*\.?\d+)%(?:\s*,\s*([+-]?\d*\.?\d+%?))?\s*\)$/i.exec(
+        /^hsla?\(\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))%\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))%(?:\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+)%?))?\s*\)$/i.exec(
             input.trim(),
         )
 

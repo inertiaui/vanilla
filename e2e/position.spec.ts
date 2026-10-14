@@ -1,5 +1,119 @@
 import { test, expect } from './test'
 
+for (const anchorPositioning of [false, true]) {
+    test(`non-flipping top-layer sizing follows changed width and content (anchors=${anchorPositioning})`, async ({
+        page,
+    }) => {
+        const results = await page.evaluate(async (anchorPositioning) => {
+            const modulePath = '/src/index.ts'
+            const { positionTopLayerPopover } = await import(modulePath)
+            const reference = document.createElement('button')
+            const floating = document.createElement('div')
+            reference.style.cssText = 'position:fixed;left:100px;top:100px;width:180px;height:30px'
+            floating.setAttribute('popover', 'manual')
+            document.body.append(reference, floating)
+            floating.showPopover()
+            try {
+                return [180, 260, 140].map((width, index) => {
+                    reference.style.width = `${width}px`
+                    floating.innerHTML = '<div>Menu content with several wrapping words.</div>'.repeat(index ? 100 : 3)
+                    const result = positionTopLayerPopover(reference, floating, {
+                        flip: false,
+                        matchReferenceWidth: true,
+                        anchorPositioning,
+                    })
+                    const rect = floating.getBoundingClientRect()
+                    return {
+                        placement: result.placement,
+                        matchesWidth: Math.abs(rect.width - reference.getBoundingClientRect().width) < 1,
+                        belowReference: Math.abs(rect.top - reference.getBoundingClientRect().bottom - 4) < 1,
+                        bounded: rect.bottom <= window.innerHeight,
+                        scrollsWhenTall: index === 0 || floating.scrollHeight > floating.clientHeight,
+                    }
+                })
+            } finally {
+                floating.hidePopover()
+                reference.remove()
+                floating.remove()
+            }
+        }, anchorPositioning)
+        expect(results).toEqual(
+            Array.from({ length: 3 }, () => ({
+                placement: 'bottom-start',
+                matchesWidth: true,
+                belowReference: true,
+                bounded: true,
+                scrollsWhenTall: true,
+            })),
+        )
+    })
+}
+
+test('reuses unchanged top-layer anchor rules and repairs changed or missing rules', async ({ page }) => {
+    const supported = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
+    test.skip(!supported, 'CSS anchor positioning is unavailable')
+    const result = await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { positionTopLayerPopover, autoUpdateTopLayerPopover } = await import(modulePath)
+        const reference = document.createElement('button')
+        reference.style.cssText = 'position:fixed;top:100px;left:100px;width:150px;height:30px'
+        const floating = document.createElement('div')
+        floating.textContent = 'Popover'
+        floating.setAttribute('popover', 'manual')
+        document.body.append(reference, floating)
+        floating.showPopover()
+        const options = { placement: 'bottom-start', offset: 4, matchReferenceWidth: true }
+        positionTopLayerPopover(reference, floating, options)
+        const sheet = () => (document.getElementById('inertiaui-anchor-styles') as HTMLStyleElement).sheet!
+        const className = Array.from(floating.classList).find((name) => name.startsWith('iui-anchor-'))!
+        const rule = () =>
+            Array.from(sheet().cssRules).find(
+                (rule) => (rule as CSSStyleRule).selectorText === `.${className}`,
+            ) as CSSStyleRule
+        const initial = rule()
+        const text = initial.cssText
+        const observed = new MutationObserver(() => {})
+        observed.observe(reference, { attributes: true })
+        observed.observe(floating, { attributes: true, attributeFilter: ['class'] })
+        for (let i = 0; i < 10; i++) positionTopLayerPopover(reference, floating, options)
+        const reused = rule() === initial
+        const unchangedAttributes = observed.takeRecords().length === 0
+        observed.disconnect()
+
+        initial.style.setProperty('margin-top', '999px')
+        positionTopLayerPopover(reference, floating, options)
+        const repaired = rule().cssText === text
+        const index = Array.from(sheet().cssRules).indexOf(rule())
+        sheet().deleteRule(index)
+        positionTopLayerPopover(reference, floating, options)
+        const recreated = rule().cssText === text
+
+        positionTopLayerPopover(reference, floating, { ...options, offset: 16 })
+        const moved =
+            Math.abs(floating.getBoundingClientRect().top - reference.getBoundingClientRect().bottom - 16) < 0.5
+        const changedRule = rule() !== initial && rule().cssText !== text
+        const cleanup = autoUpdateTopLayerPopover(reference, floating, () => {})
+        cleanup()
+        const cleaned =
+            !rule() &&
+            !reference.style.getPropertyValue('anchor-name') &&
+            !floating.style.getPropertyValue('position-anchor')
+        floating.hidePopover()
+        floating.remove()
+        reference.remove()
+        return { reused, unchangedAttributes, repaired, recreated, moved, changedRule, cleaned }
+    })
+    expect(result).toEqual({
+        reused: true,
+        unchangedAttributes: true,
+        repaired: true,
+        recreated: true,
+        moved: true,
+        changedRule: true,
+        cleaned: true,
+    })
+})
+
 test.describe('computePosition', () => {
     test.beforeEach(async ({ page }) => {
         await page.setViewportSize({ width: 1024, height: 768 })
@@ -247,13 +361,7 @@ test.describe('positionTopLayerPopover', () => {
     })
 
     test('uses CSS anchor positioning for top-layer popovers when available', async ({ page }) => {
-        const supported = await page.evaluate(
-            () =>
-                CSS.supports('anchor-name', '--iui-anchor') &&
-                CSS.supports('position-anchor', '--iui-anchor') &&
-                CSS.supports('top', 'anchor(bottom)') &&
-                CSS.supports('width', 'anchor-size(width)'),
-        )
+        const supported = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
 
         test.skip(!supported, 'CSS Anchor Positioning is not available in this browser')
 
@@ -331,10 +439,7 @@ test.describe('positionTopLayerPopover', () => {
     test('uses CSS stretch sizing for top-layer popovers when available', async ({ page }) => {
         const supported = await page.evaluate(
             () =>
-                CSS.supports('anchor-name', '--iui-anchor') &&
-                CSS.supports('position-anchor', '--iui-anchor') &&
-                CSS.supports('top', 'anchor(bottom)') &&
-                CSS.supports('width', 'anchor-size(width)') &&
+                (window as any).supportsTopLayerAnchorPositioning() &&
                 CSS.supports('height', 'max-content') &&
                 CSS.supports('max-height', 'stretch'),
         )
@@ -378,13 +483,7 @@ test.describe('positionTopLayerPopover', () => {
     })
 
     test('keeps the CSS anchor identity stable across top-layer auto updates', async ({ page }) => {
-        const supported = await page.evaluate(
-            () =>
-                CSS.supports('anchor-name', '--iui-anchor') &&
-                CSS.supports('position-anchor', '--iui-anchor') &&
-                CSS.supports('top', 'anchor(bottom)') &&
-                CSS.supports('width', 'anchor-size(width)'),
-        )
+        const supported = await page.evaluate(() => (window as any).supportsTopLayerAnchorPositioning())
 
         test.skip(!supported, 'CSS Anchor Positioning is not available in this browser')
 
@@ -477,10 +576,7 @@ test.describe('positionTopLayerPopover', () => {
     test('flips a tall top-layer popover and constrains height to available space', async ({ page }) => {
         const usesStretchSizing = await page.evaluate(
             () =>
-                CSS.supports('anchor-name', '--iui-anchor') &&
-                CSS.supports('position-anchor', '--iui-anchor') &&
-                CSS.supports('top', 'anchor(bottom)') &&
-                CSS.supports('width', 'anchor-size(width)') &&
+                (window as any).supportsTopLayerAnchorPositioning() &&
                 CSS.supports('height', 'max-content') &&
                 CSS.supports('max-height', 'stretch'),
         )

@@ -9,7 +9,8 @@ test.describe('focusFirstEnabledElement', () => {
     })
 
     test('returns false when every candidate is missing or disabled', async ({ page }) => {
-        await page.click('#focus-none-btn')
+        await page.locator('#focus-none-btn').focus()
+        await page.keyboard.press('Enter')
 
         await expect(page.locator('#focus-result')).toHaveText('false')
         await expect(page.locator('#active-id')).toHaveText('focus-none-btn')

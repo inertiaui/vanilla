@@ -61,7 +61,8 @@ for (const fallback of [false, true]) {
             await expect(page.getByRole('tooltip')).toHaveCount(0)
         })
         test('handles a tooltip inside a dialog without dismissing the dialog', async ({ page }) => {
-            await page.click('#open-dialog')
+            await page.locator('#open-dialog').focus()
+            await page.keyboard.press('Enter')
             await expect(page.locator('#outer .cancel')).toBeFocused()
             await page.locator('#trigger').focus()
             await expect(page.getByRole('tooltip')).toBeVisible()
@@ -97,7 +98,8 @@ for (const fallback of [false, true]) {
             await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
         })
         test('keeps dialog content accessible and balances cleanup across remounts', async ({ page }) => {
-            await page.click('#open-dialog')
+            await page.locator('#open-dialog').focus()
+            await page.keyboard.press('Enter')
             await expect(page.locator('#outer')).toBeVisible()
             expect(
                 await page.locator('#outer').evaluate((el) => el.closest('[inert], [aria-hidden=true]') === null),

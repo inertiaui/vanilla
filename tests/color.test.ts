@@ -69,6 +69,29 @@ describe('formatAlpha', () => {
 })
 
 describe('rgb <-> hex', () => {
+    it('extracts RGB channels without calculating or rounding HSL values', () => {
+        const round = vi.spyOn(Math, 'round')
+        try {
+            const result = hexToRgb('#3b82f680')
+            const calls = round.mock.calls.length
+            expect(result).toEqual({ r: 59, g: 130, b: 246 })
+            expect(calls).toBe(0)
+        } finally {
+            round.mockRestore()
+        }
+    })
+
+    it.each([
+        [' #AbC ', { r: 170, g: 187, b: 204 }],
+        ['AbC0', { r: 170, g: 187, b: 204 }],
+        ['ABCDEF00', { r: 171, g: 205, b: 239 }],
+        ['#000000ff', { r: 0, g: 0, b: 0 }],
+        ['#12345', { r: 0, g: 0, b: 0 }],
+        ['#123456gg', { r: 0, g: 0, b: 0 }],
+    ])('preserves shorthand, alpha validation and invalid fallback for %s', (input, expected) => {
+        expect(hexToRgb(input)).toEqual(expected)
+    })
+
     it('hexToRgb parses channels', () => {
         expect(hexToRgb('#3b82f6')).toEqual({ r: 59, g: 130, b: 246 })
     })
@@ -276,5 +299,36 @@ describe('formatColor', () => {
         const parsed = parseColorString('rgba(255, 0, 0, 0.5)')!
         expect(formatColor(parsed, 'rgb')).toBe('rgba(255, 0, 0, 0.5)')
         expect(formatColor(parsed, 'hex')).toBe('#ff000080')
+    })
+})
+
+describe('color numeric grammar', () => {
+    it.each(['.5', '+.5', '000.5', '+000.5', '0.5'])('accepts equivalent decimal tokens: %s', (token) => {
+        expect(parseRgbColor(`rgba(${token}, 0, 0, ${token})`)).toEqual(parseRgbColor('rgba(0.5, 0, 0, 0.5)'))
+        expect(parseHslColor(`hsla(${token}, ${token}%, ${token}%, ${token})`)).toEqual(
+            parseHslColor('hsla(0.5, 0.5%, 0.5%, 0.5)'),
+        )
+    })
+
+    it.each(['1.', '.', '+.', '1..2', '1e2', '--1', '+ 1'])('rejects malformed numeric tokens: %s', (token) => {
+        expect(parseRgbColor(`rgb(${token}, 0, 0)`)).toBeNull()
+        expect(parseHslColor(`hsl(${token}, 0%, 0%)`)).toBeNull()
+    })
+
+    it('preserves long numeric inputs and rejects invalid suffixes in every channel', () => {
+        const valid = '0'.repeat(10000) + '1'
+        const invalid = '1'.repeat(10000) + 'x'
+        expect(parseRgbColor(`rgb(${valid}, 0, 0)`)).toEqual(parseRgbColor('rgb(1, 0, 0)'))
+        expect(parseHslColor(`hsl(${valid}, 0%, 0%)`)).toEqual(parseHslColor('hsl(1, 0%, 0%)'))
+        for (let index = 0; index < 4; index++) {
+            const rgb = ['1', '2', '3', '1']
+            const hsl = ['1', '2%', '3%', '1']
+            rgb[index] = invalid
+            hsl[index] = invalid + (index === 1 || index === 2 ? '%' : '')
+            expect(parseRgbColor(`rgba(${rgb.join(',')})`)).toBeNull()
+            expect(parseHslColor(`hsla(${hsl.join(',')})`)).toBeNull()
+            expect(parseColorString(`rgba(${rgb.join(',')})`)).toBeNull()
+            expect(parseColorString(`hsla(${hsl.join(',')})`)).toBeNull()
+        }
     })
 })
