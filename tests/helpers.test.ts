@@ -1,4 +1,26 @@
-import { except, isStandardDomEvent, only } from '../src/helpers'
+import { except, isStandardDomEvent, kebabCase, only } from '../src/helpers'
+
+describe('kebabCase', () => {
+    it.each([
+        ['XMLHttpRequest', 'xml-http-request'],
+        ['getHTTPResponseCode', 'get-http-response-code'],
+        ['ABCDefGHij', 'abc-def-g-hij'],
+        ['AAaAAa', 'a-aa-a-aa'],
+        ['URL42Value', 'url42-value'],
+        ['already--kebab_case Name', 'already-kebab-case-name'],
+        ['überHTTPServer', 'über-http-server'],
+        ['', ''],
+    ])('preserves acronym and word boundaries in %s', (input, expected) => {
+        expect(kebabCase(input)).toBe(expected)
+    })
+
+    it('handles long uppercase runs with or without a following word', () => {
+        const acronym = 'A'.repeat(10000)
+        expect(kebabCase(acronym)).toBe('a'.repeat(10000))
+        expect(kebabCase(acronym + 'Value')).toBe('a'.repeat(10000) + '-value')
+        expect(kebabCase(acronym + '42')).toBe('a'.repeat(10000) + '42')
+    })
+})
 
 describe.each([only, except])('%s filtering', (filter) => {
     const include = filter === only

@@ -26,8 +26,8 @@ export function lockScroll(): CleanupFunction {
         originalPaddingRight = document.body.style.paddingRight
         originalScrollbarGutter = document.documentElement.style.getPropertyValue('scrollbar-gutter')
 
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
         const canReserveScrollbarGutter = supportsScrollbarGutter()
+        const scrollbarWidth = canReserveScrollbarGutter ? 0 : window.innerWidth - document.documentElement.clientWidth
 
         if (canReserveScrollbarGutter) {
             document.documentElement.style.setProperty('scrollbar-gutter', 'stable')
@@ -248,9 +248,13 @@ export function createFocusTrap(container: HTMLElement, options: FocusTrapOption
 
         container.removeEventListener('focusout', handleFocusOut)
 
-        const index = focusTrapStack.indexOf(entry)
-        if (index >= 0) {
-            focusTrapStack.splice(index, 1)
+        if (focusTrapStack[focusTrapStack.length - 1] === entry) {
+            focusTrapStack.pop()
+        } else {
+            const index = focusTrapStack.indexOf(entry)
+            if (index >= 0) {
+                focusTrapStack.splice(index, 1)
+            }
         }
 
         if (focusTrapStack.length === 0) {

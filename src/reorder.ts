@@ -146,7 +146,13 @@ function moveArrayItem<T>(items: readonly T[], fromIndex: number, toIndex: numbe
 }
 
 function identityOrder(length: number): number[] {
-    return Array.from({ length }, (_, index) => index)
+    // Preallocate dense indexes without Array.from's per-item callback overhead.
+    // oxlint-disable-next-line unicorn/no-new-array
+    const order = new Array<number>(length)
+    for (let index = 0; index < length; index++) {
+        order[index] = index
+    }
+    return order
 }
 
 function isHTMLElement(value: unknown): value is HTMLElement {

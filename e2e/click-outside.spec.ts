@@ -84,3 +84,54 @@ test.describe('onClickOutside', () => {
         await expect(page.locator('#cleanup-before-timeout-dropdown')).toBeVisible()
     })
 })
+
+test('portal detection preserves HTML, SVG, text targets, and live target arrays', async ({ page }) => {
+    const calls = await page.evaluate(async () => {
+        const { onClickOutside } = await import('/src/index.ts')
+        const inside = document.createElement('div')
+        const outside = document.createElement('div')
+        const portal = document.createElement('div')
+        portal.setAttribute('data-inertiaui-portal', '')
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('data-inertiaui-portal', '')
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+        svg.append(circle)
+        outside.append(svg)
+        const text = document.createTextNode('target')
+        outside.append(text)
+        document.body.append(inside, outside, portal)
+        const targets = [inside]
+        const seen: string[] = []
+        let label = ''
+        const cleanup = onClickOutside(targets, () => seen.push(label))
+        const send = (target: Node, name: string) => {
+            label = name
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+        }
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            send(inside, 'inside')
+            send(circle, 'svg outside')
+            send(text, 'text outside')
+            portal.append(svg, text)
+            send(circle, 'svg inside HTML portal')
+            send(text, 'text inside HTML portal')
+            send(portal, 'portal itself')
+            send(document, 'document')
+            targets.push(outside)
+            send(outside, 'newly registered target')
+            targets.pop()
+            send(outside, 'removed target')
+            cleanup()
+            cleanup()
+            send(outside, 'after cleanup')
+            return seen
+        } finally {
+            cleanup()
+            inside.remove()
+            outside.remove()
+            portal.remove()
+        }
+    })
+    expect(calls).toEqual(['svg outside', 'text outside', 'document', 'removed target'])
+})

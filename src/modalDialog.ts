@@ -42,8 +42,12 @@ export function createDialogController(options: DialogControllerOptions): Dialog
         revision++
         closing = false
         const top = dialogs[dialogs.length - 1] === entry
-        const index = dialogs.indexOf(entry)
-        if (index !== -1) dialogs.splice(index, 1)
+        if (top) {
+            dialogs.pop()
+        } else {
+            const index = dialogs.indexOf(entry)
+            if (index !== -1) dialogs.splice(index, 1)
+        }
         cleanups.forEach((cleanup) => cleanup())
         cleanups = []
         if (native && (mounted as HTMLDialogElement | null)?.open) (mounted as HTMLDialogElement).close()

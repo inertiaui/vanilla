@@ -32,6 +32,35 @@ describe('createReorderableList', () => {
         vi.restoreAllMocks()
     })
 
+    it('returns fresh dense preview indexes for the current items, including sparse arrays', () => {
+        let items: string[] = ['alpha', 'beta', 'gamma']
+        const controller = createReorderableList({ getItems: () => items })
+        const first = controller.getPreviewOrder()
+        first.reverse()
+        expect(controller.getPreviewOrder()).toEqual([0, 1, 2])
+        items = []
+        items.length = 4
+        items[2] = 'sparse'
+        expect(controller.getPreviewOrder()).toEqual([0, 1, 2, 3])
+        expect(controller.getPreviewItems()).toEqual([
+            { item: undefined, index: 0, visualIndex: 0 },
+            { item: undefined, index: 1, visualIndex: 1 },
+            { item: 'sparse', index: 2, visualIndex: 2 },
+            { item: undefined, index: 3, visualIndex: 3 },
+        ])
+        items = []
+        expect(controller.getPreviewOrder()).toEqual([])
+        controller.cleanup()
+    })
+
+    it('preserves getter reads and filters preview indexes against the first item snapshot', () => {
+        const getItems = vi.fn().mockReturnValueOnce(['first']).mockReturnValue(['other', 'extra'])
+        const controller = createReorderableList({ getItems })
+        expect(controller.getPreviewItems()).toEqual([{ item: 'first', index: 0, visualIndex: 0 }])
+        expect(getItems).toHaveBeenCalledTimes(2)
+        controller.cleanup()
+    })
+
     it('previews pointer order and commits the previewed move once', () => {
         const container = document.createElement('div')
         const handle = document.createElement('button')

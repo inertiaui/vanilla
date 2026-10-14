@@ -1,4 +1,4 @@
-import { createFocusTrap, markAriaHidden, markInert } from '../src/dialog'
+import { createFocusTrap, lockScroll, markAriaHidden, markInert } from '../src/dialog'
 
 describe('dialog accessibility state', () => {
     afterEach(() => {
@@ -329,6 +329,115 @@ describe('deferred focus recovery ownership', () => {
         } finally {
             releaseInner()
             releaseOuter()
+        }
+    })
+})
+
+describe('scroll lock measurement', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+    })
+
+    it('does not measure scrollbar width when native gutter reservation is available', () => {
+        vi.stubGlobal('CSS', { supports: () => true })
+        const width = vi.spyOn(document.documentElement, 'clientWidth', 'get')
+        const release = lockScroll()
+        try {
+            expect(document.body.style.overflow).toBe('hidden')
+            expect(width).not.toHaveBeenCalled()
+        } finally {
+            release()
+        }
+    })
+
+    it('measures the fallback width before locking and restores existing padding', () => {
+        vi.stubGlobal('CSS', { supports: () => false })
+        const originalPadding = document.body.style.paddingRight
+        document.body.style.paddingRight = '7px'
+        const width = vi.spyOn(document.documentElement, 'clientWidth', 'get').mockImplementation(() => {
+            expect(document.body.style.overflow).not.toBe('hidden')
+            return window.innerWidth - 20
+        })
+        const release = lockScroll()
+        try {
+            expect(document.body.style.paddingRight).toBe('20px')
+            expect(width).toHaveBeenCalledTimes(1)
+        } finally {
+            release()
+            expect(document.body.style.paddingRight).toBe('7px')
+            document.body.style.paddingRight = originalPadding
+        }
+    })
+})
+
+describe('focus trap stack cleanup', () => {
+    it('preserves ownership after removing a middle trap followed by the top trap', () => {
+        const containers = Array.from({ length: 3 }, () => {
+            const element = document.createElement('div')
+            element.append(document.createElement('button'))
+            document.body.append(element)
+            return element
+        })
+        const outside = document.createElement('button')
+        document.body.append(outside)
+        const release = containers.map((element) =>
+            createFocusTrap(element, { initialFocus: false, returnFocus: false }),
+        )
+        try {
+            release[1]()
+            outside.focus()
+            expect(document.activeElement).toBe(containers[2].firstElementChild)
+            release[2]()
+            outside.focus()
+            expect(document.activeElement).toBe(containers[0].firstElementChild)
+            release[1]()
+            release[0]()
+            outside.focus()
+            expect(document.activeElement).toBe(outside)
+        } finally {
+            release.forEach((cleanup) => cleanup())
+            containers.forEach((element) => element.remove())
+            outside.remove()
+        }
+    })
+})
+
+describe('dialog controller stack cleanup', () => {
+    it('supports middle, top and repeated cleanup while preserving scroll ownership', async () => {
+        const { createDialogController } = await import('../src/modalDialog')
+        const originalOverflow = document.body.style.overflow
+        const released: number[] = []
+        const elements = Array.from({ length: 3 }, () => {
+            const dialog = document.createElement('dialog')
+            const panel = document.createElement('div')
+            dialog.append(panel)
+            document.body.append(dialog)
+            return { dialog, panel }
+        })
+        const controllers = elements.map(({ dialog, panel }, index) =>
+            createDialogController({
+                dialog: () => dialog,
+                panel: () => panel,
+                onMount: () => () => released.push(index),
+            }),
+        )
+        try {
+            controllers.forEach((controller) => {
+                controller.open()
+                controller.mount()
+            })
+            await controllers[1].close()
+            expect(document.body.style.overflow).toBe('hidden')
+            await controllers[2].close()
+            expect(document.body.style.overflow).toBe('hidden')
+            controllers[1].cleanup()
+            await controllers[0].close()
+            expect(released).toEqual([1, 2, 0])
+            expect(document.body.style.overflow).toBe(originalOverflow)
+        } finally {
+            controllers.forEach((controller) => controller.cleanup())
+            elements.forEach(({ dialog }) => dialog.remove())
         }
     })
 })

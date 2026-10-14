@@ -8,11 +8,12 @@ export function debounce<T extends (...args: unknown[]) => void>(fn: T): (...arg
     let frame: number | undefined
 
     return (...params: Parameters<T>) => {
-        if (frame) {
+        if (frame !== undefined) {
             cancelAnimationFrame(frame)
         }
 
         frame = requestAnimationFrame(() => {
+            frame = undefined
             fn(...params)
         })
     }

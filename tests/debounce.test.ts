@@ -1,4 +1,59 @@
-import { createDebouncer, detectFramerate } from '../src/debounce'
+import { createDebouncer, debounce, detectFramerate } from '../src/debounce'
+
+describe('animation-frame debounce', () => {
+    afterEach(() => vi.restoreAllMocks())
+
+    it('does not cancel already completed frames, including when the callback reschedules itself', () => {
+        const frames = new Map<number, FrameRequestCallback>()
+        let nextId = 1
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+            const id = nextId++
+            frames.set(id, callback)
+            return id
+        })
+        const cancel = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation((id) => {
+            frames.delete(id)
+        })
+        const values: unknown[] = []
+        const scheduled = debounce((value: unknown) => {
+            values.push(value)
+            if (value === 'first') scheduled('second')
+        })
+        const flush = () => {
+            const pending = [...frames.values()]
+            frames.clear()
+            pending.forEach((callback) => callback(0))
+        }
+        scheduled('first')
+        flush()
+        expect(values).toEqual(['first'])
+        flush()
+        scheduled('third')
+        flush()
+        expect(values).toEqual(['first', 'second', 'third'])
+        expect(cancel).not.toHaveBeenCalled()
+    })
+
+    it('keeps latest arguments and callback ordering when the first frame handle is zero', () => {
+        const frames = new Map<number, FrameRequestCallback>()
+        let nextId = 0
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+            const id = nextId++
+            frames.set(id, callback)
+            return id
+        })
+        vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation((id) => {
+            frames.delete(id)
+        })
+        const values: unknown[] = []
+        const scheduled = debounce((...args: unknown[]) => values.push(args))
+        scheduled('old')
+        requestAnimationFrame(() => values.push('independent'))
+        scheduled('latest', 2)
+        for (const callback of frames.values()) callback(0)
+        expect(values).toEqual(['independent', ['latest', 2]])
+    })
+})
 
 describe('createDebouncer', () => {
     beforeEach(() => vi.useFakeTimers())
