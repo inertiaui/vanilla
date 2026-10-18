@@ -184,4 +184,59 @@ describe('animation snapshots', () => {
         expect(animate).toHaveBeenCalledTimes(1)
         expect(animations[0].cancel).toHaveBeenCalledTimes(1)
     })
+
+    it('measures independent elements before starting or cancelling any animations', () => {
+        const elements = [appendElement(), appendElement(), appendElement()]
+        const snapshot = new Map(elements.map((element) => [element, rect(0, 0)]))
+        let writing = false
+        let lateReads = 0
+        const { animate, animations } = mockAnimationSupport()
+        elements.forEach((element) => {
+            element.getBoundingClientRect = () => {
+                if (writing) lateReads++
+                return rect(0, 20)
+            }
+        })
+        // Existing owned animations must also remain untouched during measurement.
+        animateFromSnapshot(snapshot, elements)
+        animations.forEach((animation) =>
+            animation.cancel.mockImplementation(() => {
+                writing = true
+            }),
+        )
+        const original = animate.getMockImplementation()!
+        animate.mockImplementation(() => {
+            writing = true
+            return original()
+        })
+        const result = animateFromSnapshot(snapshot, elements)
+        expect(result).toHaveLength(3)
+        expect(lateReads).toBe(0)
+        expect(animations.slice(0, 3).every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true)
+    })
+
+    it('avoids repeating root lookups for sibling animations in a deep tree', () => {
+        const { animations } = mockAnimationSupport()
+        let parent = appendElement()
+        for (let depth = 0; depth < 20; depth++) {
+            const child = document.createElement('div')
+            parent.append(child)
+            parent = child
+        }
+        const elements = Array.from({ length: 50 }, () => {
+            const element = document.createElement('div')
+            parent.append(element)
+            setRect(element, rect(0, 0))
+            return element
+        })
+        const snapshot: AnimationSnapshot = new Map(elements.map((element) => [element, rect(0, 20)]))
+        vi.stubGlobal(
+            'getComputedStyle',
+            vi.fn(() => ({ transform: 'none' })),
+        )
+        const roots = vi.spyOn(Node.prototype, 'getRootNode')
+        animateFromSnapshot(snapshot, elements)
+        expect(animations).toHaveLength(elements.length)
+        expect(roots.mock.calls.length).toBeLessThan(elements.length)
+    })
 })

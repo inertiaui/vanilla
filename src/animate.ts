@@ -126,6 +126,37 @@ function cancelSnapshotAnimation(element: HTMLElement): void {
     }
 }
 
+function canBatchSnapshotMeasurements(elements: HTMLElement[]): boolean {
+    const targets = new Set<Element>(elements)
+
+    // Repeated elements must see the animation started by their previous occurrence.
+    if (targets.size !== elements.length) {
+        return false
+    }
+
+    const checkedAncestors = new Set<Element>()
+    for (const element of elements) {
+        let ancestor: Element | null = element
+
+        while (ancestor) {
+            let parent: Element | null = ancestor.assignedSlot ?? ancestor.parentElement
+            if (!parent) {
+                const root = ancestor.getRootNode()
+                parent = typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot ? root.host : null
+            }
+            ancestor = parent
+            if (!ancestor) break
+            // Starting an ancestor's animation changes descendant geometry.
+            if (targets.has(ancestor)) return false
+            // Shared ancestor chains need inspection only once per operation.
+            if (checkedAncestors.has(ancestor)) break
+            checkedAncestors.add(ancestor)
+        }
+    }
+
+    return true
+}
+
 /**
  * Capture current element rectangles before a renderer changes their order or
  * position. Pass the snapshot to animateFromSnapshot after the DOM has updated.
@@ -159,18 +190,26 @@ export function animateFromSnapshot(
 
     const resolvedOptions = { ...snapshotAnimationOptions, ...options }
     const animations: Animation[] = []
+    const targets = connectedElements(elements).filter((element) => snapshot.has(element))
 
-    for (const element of connectedElements(elements)) {
-        const before = snapshot.get(element)
-
-        if (!before) {
-            continue
-        }
-
+    const measure = (element: HTMLElement) => {
+        const before = snapshot.get(element)!
         const after = element.getBoundingClientRect()
         const running = resolvedOptions.includeCurrentTransform ? currentTranslate(element) : { x: 0, y: 0 }
-        const deltaX = before.left - after.left + running.x
-        const deltaY = before.top - after.top + running.y
+
+        return {
+            deltaX: before.left - after.left + running.x,
+            deltaY: before.top - after.top + running.y,
+        }
+    }
+
+    // Ordinary reorder lists contain independent elements: read all geometry and
+    // transforms before cancelling/starting animations to avoid a layout per item.
+    const measurements = canBatchSnapshotMeasurements(targets) ? targets.map(measure) : null
+    const animationOptions = resolveAnimationOptions(resolvedOptions)
+
+    for (const [index, element] of targets.entries()) {
+        const { deltaX, deltaY } = measurements?.[index] ?? measure(element)
 
         if (Math.abs(deltaX) < resolvedOptions.minimumDelta && Math.abs(deltaY) < resolvedOptions.minimumDelta) {
             cancelSnapshotAnimation(element)
@@ -181,7 +220,7 @@ export function animateFromSnapshot(
 
         const animation = element.animate(
             [{ transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` }, { transform: 'translate3d(0, 0, 0)' }],
-            resolveAnimationOptions(resolvedOptions),
+            animationOptions,
         )
 
         activeSnapshotAnimations.set(element, animation)

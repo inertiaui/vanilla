@@ -136,24 +136,27 @@ export function positionTopLayerPopover(
     const viewportHeight = Math.max(0, Math.floor(viewport.height - viewportMargin * 2))
 
     if (anchorPositioning && supportsTopLayerAnchorPositioning() && (!flip || supportsAnchorFlip())) {
-        if (matchReferenceWidth) {
-            setStyleProperty(floating.style, 'width', `${Math.min(referenceRect.width, maxWidth)}px`)
-        }
+        let resolvedPlacement = placement
+        if (flip) {
+            if (matchReferenceWidth) {
+                setStyleProperty(floating.style, 'width', `${Math.min(referenceRect.width, maxWidth)}px`)
+            }
 
-        const measuredRect = floating.getBoundingClientRect()
-        const naturalSize = {
-            width: Math.max(measuredRect.width, floating.scrollWidth),
-            height: Math.max(measuredRect.height, floating.scrollHeight),
+            const measuredRect = floating.getBoundingClientRect()
+            const naturalSize = {
+                width: Math.max(measuredRect.width, floating.scrollWidth),
+                height: Math.max(measuredRect.height, floating.scrollHeight),
+            }
+            resolvedPlacement = resolveTopLayerPlacement(
+                placement,
+                referenceRect,
+                naturalSize,
+                viewport,
+                offset,
+                viewportMargin,
+                flip,
+            )
         }
-        const resolvedPlacement = resolveTopLayerPlacement(
-            placement,
-            referenceRect,
-            naturalSize,
-            viewport,
-            offset,
-            viewportMargin,
-            flip,
-        )
         const [resolvedSide] = resolvedPlacement.split('-')
         const stretchToAvailableHeight =
             (resolvedSide === 'top' || resolvedSide === 'bottom') && supportsTopLayerAnchorSizing()
@@ -208,20 +211,23 @@ export function positionTopLayerPopover(
         setStyleProperty(floating.style, 'width', `${Math.min(referenceRect.width, maxWidth)}px`)
     }
 
-    const measuredRect = floating.getBoundingClientRect()
-    const naturalSize = {
-        width: Math.max(measuredRect.width, floating.scrollWidth),
-        height: Math.max(measuredRect.height, floating.scrollHeight),
+    let resolvedPlacement = placement
+    if (flip) {
+        const measuredRect = floating.getBoundingClientRect()
+        const naturalSize = {
+            width: Math.max(measuredRect.width, floating.scrollWidth),
+            height: Math.max(measuredRect.height, floating.scrollHeight),
+        }
+        resolvedPlacement = resolveTopLayerPlacement(
+            placement,
+            referenceRect,
+            naturalSize,
+            viewport,
+            offset,
+            viewportMargin,
+            flip,
+        )
     }
-    const resolvedPlacement = resolveTopLayerPlacement(
-        placement,
-        referenceRect,
-        naturalSize,
-        viewport,
-        offset,
-        viewportMargin,
-        flip,
-    )
     const [resolvedSide] = resolvedPlacement.split('-')
     const availableHeight = Math.min(
         viewportHeight,

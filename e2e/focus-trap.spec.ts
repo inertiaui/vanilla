@@ -66,12 +66,8 @@ test.describe('createFocusTrap', () => {
     })
 
     test('returnFocus restores focus on cleanup', async ({ page }) => {
-        // Focus outside-btn, then open dialog via keyboard to preserve focus context
-        await page.locator('#outside-btn').focus()
-        await expect(page.locator('#outside-btn')).toBeFocused()
-
-        // Use Tab to reach open-dialog-btn, then Enter to open
-        await page.keyboard.press('Tab')
+        // Establish focus explicitly; macOS keyboard settings can skip buttons on Tab.
+        await page.locator('#open-dialog-btn').focus()
         await expect(page.locator('#open-dialog-btn')).toBeFocused()
         await page.keyboard.press('Enter')
         await expect(page.locator('#d1-first')).toBeFocused()
@@ -214,3 +210,190 @@ test.describe('createFocusTrap', () => {
         await expect(page.locator('#d1-first')).toBeFocused()
     })
 })
+
+test('initial focus and recovery follow changed controls in a large dialog', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { createFocusTrap } = await import(modulePath)
+        const container = document.createElement('section')
+        container.innerHTML =
+            '<button aria-hidden="true">Hidden</button><button disabled>Disabled</button><a href="#">First</a>' +
+            Array.from({ length: 1000 }, (_, index) => `<input data-index="${index}">`).join('')
+        const outside = document.createElement('button')
+        document.body.append(container, outside)
+        const release = createFocusTrap(container, { returnFocus: false })
+        try {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+            const initial = document.activeElement === container.children[2]
+            container.children[2].setAttribute('aria-hidden', 'true')
+            outside.focus()
+            const recovered = document.activeElement === container.children[3]
+            container.children[3].setAttribute('disabled', '')
+            outside.focus()
+            const changed = document.activeElement === container.children[4]
+            const replacement = document.createElement('textarea')
+            container.prepend(replacement)
+            outside.focus()
+            const inserted = document.activeElement === replacement
+            replacement.blur()
+            await Promise.resolve()
+            const recapturedAfterBlur = document.activeElement === replacement
+            replacement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+            const wrapped = document.activeElement === container.lastElementChild
+            return { initial, recovered, changed, inserted, recapturedAfterBlur, wrapped }
+        } finally {
+            release()
+            container.remove()
+            outside.remove()
+        }
+    })
+    expect(result).toEqual({
+        initial: true,
+        recovered: true,
+        changed: true,
+        inserted: true,
+        recapturedAfterBlur: true,
+        wrapped: true,
+    })
+})
+
+for (const transfer of ['cleanup', 'new-trap']) {
+    test(`queued focus recovery respects ${transfer}`, async ({ page }) => {
+        const result = await page.evaluate(async (transfer) => {
+            const modulePath = '/src/index.ts'
+            const { createFocusTrap } = await import(modulePath)
+            const outer = document.createElement('div')
+            const first = document.createElement('button')
+            const inner = document.createElement('div')
+            inner.append(document.createElement('button'))
+            const outside = document.createElement('button')
+            outer.append(first, inner)
+            document.body.append(outer, outside)
+            const release = createFocusTrap(outer, { initialFocus: false, returnFocus: false })
+            let releaseInner = () => {}
+            try {
+                first.focus()
+                first.blur()
+                let staleFocuses = 0
+                first.addEventListener('focus', () => staleFocuses++)
+                if (transfer === 'cleanup') {
+                    release()
+                    outside.focus()
+                } else {
+                    releaseInner = createFocusTrap(inner, { initialFocus: false, returnFocus: false })
+                }
+                await Promise.resolve()
+                return {
+                    staleFocuses,
+                    outsideRetained: transfer !== 'cleanup' || document.activeElement === outside,
+                }
+            } finally {
+                releaseInner()
+                release()
+                outer.remove()
+                outside.remove()
+            }
+        }, transfer)
+        expect(result).toEqual({ staleFocuses: 0, outsideRetained: true })
+    })
+}
+
+test('an older trap cannot apply initial focus after a newer trap opts out', async ({ page }) => {
+    const retained = await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { createFocusTrap } = await import(modulePath)
+        const outside = document.createElement('button')
+        const outer = document.createElement('div')
+        const inner = document.createElement('div')
+        inner.append(document.createElement('button'))
+        outer.append(document.createElement('button'), inner)
+        document.body.append(outside, outer)
+        outside.focus()
+        const releaseOuter = createFocusTrap(outer, { returnFocus: false })
+        const releaseInner = createFocusTrap(inner, { initialFocus: false, returnFocus: false })
+        try {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+            return document.activeElement === outside
+        } finally {
+            releaseInner()
+            releaseOuter()
+            outer.remove()
+            outside.remove()
+        }
+    })
+    expect(retained).toBe(true)
+})
+
+test('leaves interior backward Tab native and follows changed trap boundaries', async ({ page }) => {
+    await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { createFocusTrap } = await import(modulePath)
+        const container = document.createElement('div')
+        container.innerHTML = '<input id="inside-first"><input id="inside-middle"><input id="inside-last">'
+        document.body.append(container)
+        ;(window as any).releaseInteriorTrap = createFocusTrap(container, { initialFocus: false, returnFocus: false })
+    })
+    try {
+        await page.locator('#inside-middle').focus()
+        await page.keyboard.press('Shift+Tab')
+        await expect(page.locator('#inside-first')).toBeFocused()
+        await page.locator('#inside-first').evaluate((element) => element.setAttribute('disabled', ''))
+        await page.locator('#inside-middle').focus()
+        await page.keyboard.press('Shift+Tab')
+        await expect(page.locator('#inside-last')).toBeFocused()
+        await page.keyboard.press('Tab')
+        await expect(page.locator('#inside-middle')).toBeFocused()
+    } finally {
+        await page.evaluate(() => (window as any).releaseInteriorTrap())
+    }
+})
+
+for (const tail of [0, 80]) {
+    test(`forward Tab and wrapping follow nested, changing controls with ${tail} decorative nodes`, async ({
+        page,
+    }) => {
+        await page.evaluate(async (tail) => {
+            const modulePath = '/src/index.ts'
+            const { createFocusTrap } = await import(modulePath)
+            const container = document.createElement('div')
+            container.id = 'dynamic-trap'
+            container.innerHTML =
+                '<input id="dynamic-first"><section tabindex="0" id="dynamic-parent">' +
+                '<input id="dynamic-middle"><div><input id="dynamic-last"><span>Label</span></div></section>' +
+                '<input disabled><input aria-hidden="true" tabindex="-1"><footer>' +
+                '<span>Decoration</span>'.repeat(tail) +
+                '</footer>'
+            document.body.append(container)
+            ;(window as any).releaseDynamicTrap = createFocusTrap(container, {
+                initialFocus: false,
+                returnFocus: false,
+            })
+        }, tail)
+        try {
+            await page.locator('#dynamic-middle').focus()
+            await page.keyboard.press('Tab')
+            await expect(page.locator('#dynamic-last')).toBeFocused()
+            await page.keyboard.press('Tab')
+            await expect(page.locator('#dynamic-first')).toBeFocused()
+            await page.keyboard.press('Shift+Tab')
+            await expect(page.locator('#dynamic-last')).toBeFocused()
+            await page.locator('#dynamic-last').evaluate((element) => element.setAttribute('disabled', ''))
+            await page.locator('#dynamic-middle').focus()
+            await page.keyboard.press('Tab')
+            await expect(page.locator('#dynamic-first')).toBeFocused()
+            await page.locator('#dynamic-middle').evaluate((element) => element.remove())
+            await page.keyboard.press('Shift+Tab')
+            await expect(page.locator('#dynamic-parent')).toBeFocused()
+            await page.locator('#dynamic-trap').evaluate((element) => {
+                const input = document.createElement('input')
+                input.id = 'dynamic-inserted'
+                element.append(input)
+            })
+            await page.locator('#dynamic-first').focus()
+            await page.keyboard.press('Shift+Tab')
+            await expect(page.locator('#dynamic-inserted')).toBeFocused()
+        } finally {
+            await page.evaluate(() => (window as any).releaseDynamicTrap())
+        }
+    })
+}

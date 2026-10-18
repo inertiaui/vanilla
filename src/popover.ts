@@ -1,7 +1,11 @@
 import { onClickOutside } from './clickOutside'
 import { onEscapeKey, type CleanupFunction } from './dialog'
 import { createMenuNavigation } from './menu'
-import { createNativePopoverDisclosure } from './nativePopover'
+import {
+    createNativePopoverDisclosure,
+    type NativePopoverDisclosureController,
+    type NativePopoverDisclosureOptions,
+} from './nativePopover'
 import type { Placement, TopLayerPopoverPositionOptions } from './position'
 
 export interface PopoverMountContext {
@@ -42,7 +46,9 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
     let pointerStartedOpen = false
     let focusLast = false
 
-    const disclosure = createNativePopoverDisclosure({
+    // Preserve construction-time callbacks while deferring disclosure and timer
+    // state until the first interaction. Closed menu lists need neither.
+    const disclosureOptions: NativePopoverDisclosureOptions = {
         reference: options.reference,
         popover: options.popover,
         get position() {
@@ -64,12 +70,17 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
             onDismiss: () => close(false),
         },
         onOpenChange: options.onOpenChange,
-    })
+    }
+    let disclosure: NativePopoverDisclosureController | undefined
+
+    function getDisclosure(): NativePopoverDisclosureController {
+        return (disclosure ??= createNativePopoverDisclosure(disclosureOptions))
+    }
 
     function cleanup(hide = true) {
         cleanups.forEach((cleanup) => cleanup())
         cleanups = []
-        disclosure.cleanupPopover()
+        disclosure?.cleanupPopover()
         if (hide && native && mountedPanel?.matches(':popover-open')) {
             mountedPanel.hidePopover()
         }
@@ -94,7 +105,7 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
     }
 
     function close(restoreFocus = shouldReturnFocus()) {
-        disclosure.closePopover({
+        disclosure?.closePopover({
             hide: false,
             onClose() {
                 cleanup()
@@ -105,27 +116,28 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
     }
 
     function onKeydown(event: KeyboardEvent) {
-        if (event.key === 'Escape' && disclosure.isOpen) {
+        if (event.key === 'Escape' && disclosure?.isOpen) {
             event.preventDefault()
             event.stopPropagation()
             close(true)
-        } else if (options.menu && !disclosure.isOpen && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+        } else if (options.menu && !disclosure?.isOpen && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
             event.preventDefault()
             focusLast = event.key === 'ArrowUp'
-            disclosure.openPopover()
+            getDisclosure().openPopover()
         }
     }
 
     function mount() {
         const reference = options.reference()
         const panel = options.popover()
-        if (!disclosure.isOpen || !reference || !panel) return
+        if (!disclosure?.isOpen || !reference || !panel) return
+        const activeDisclosure = disclosure
         cleanup()
         mountedPanel = panel
 
         const onBeforeToggle = (event: Event) => {
             const restoreFocus = shouldReturnFocus()
-            disclosure.handlePopoverToggle(event, {
+            activeDisclosure.handlePopoverToggle(event, {
                 onClose() {
                     cleanup(false)
                     if (restoreFocus) returnFocus()
@@ -135,21 +147,21 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
         }
         panel.addEventListener('beforetoggle', onBeforeToggle)
         panel.addEventListener('keydown', onKeydown)
-        panel.addEventListener('focusout', disclosure.handleFocusOut)
+        panel.addEventListener('focusout', activeDisclosure.handleFocusOut)
         cleanups.push(() => {
             panel.removeEventListener('beforetoggle', onBeforeToggle)
             panel.removeEventListener('keydown', onKeydown)
-            panel.removeEventListener('focusout', disclosure.handleFocusOut)
+            panel.removeEventListener('focusout', activeDisclosure.handleFocusOut)
         })
 
         if (native) {
-            disclosure.showPopover()
+            activeDisclosure.showPopover()
         } else {
-            disclosure.updatePosition()
+            activeDisclosure.updatePosition()
             cleanups.push(onClickOutside([reference, panel], () => close()))
             cleanups.push(onEscapeKey(() => close(true)))
         }
-        disclosure.startAutoUpdate()
+        activeDisclosure.startAutoUpdate()
 
         const cleanupMount = options.onMount?.({ reference, popover: panel, native })
         if (cleanupMount) cleanups.push(cleanupMount)
@@ -178,8 +190,8 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
         pointerStartedOpen = false
         if (wasOpen) close()
         else
-            disclosure.togglePopover(
-                () => disclosure.openPopover(),
+            getDisclosure().togglePopover(
+                () => getDisclosure().openPopover(),
                 () => close(),
             )
     }
@@ -187,17 +199,17 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
     return {
         native,
         get isOpen() {
-            return disclosure.isOpen
+            return disclosure?.isOpen ?? false
         },
-        open: () => disclosure.openPopover(),
+        open: () => getDisclosure().openPopover(),
         close,
         mount,
         cleanup,
         toggle,
         onKeydown,
-        onFocusOut: disclosure.handleFocusOut,
+        onFocusOut: (event) => getDisclosure().handleFocusOut(event),
         onPointerDown: () => {
-            pointerStartedOpen = disclosure.isOpen
+            pointerStartedOpen = disclosure?.isOpen ?? false
         },
     }
 }

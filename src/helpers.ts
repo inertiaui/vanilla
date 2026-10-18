@@ -22,12 +22,14 @@ export function except<T extends Record<string, unknown>>(
         keys = keys.map(strToLowercase)
     }
 
+    const keySet = new Set(keys)
+
     if (Array.isArray(target)) {
-        return target.filter((key) => !keys.includes(ignoreCase ? strToLowercase(key) : key))
+        return target.filter((key) => !keySet.has(ignoreCase ? strToLowercase(key) : key))
     }
 
     return Object.keys(target).reduce((acc, key) => {
-        if (!keys.includes(ignoreCase ? strToLowercase(key) : key)) {
+        if (!keySet.has(ignoreCase ? strToLowercase(key) : key)) {
             ;(acc as Record<string, unknown>)[key] = target[key]
         }
 
@@ -46,12 +48,14 @@ export function only<T extends Record<string, unknown>>(
         keys = keys.map(strToLowercase)
     }
 
+    const keySet = new Set(keys)
+
     if (Array.isArray(target)) {
-        return target.filter((key) => keys.includes(ignoreCase ? strToLowercase(key) : key))
+        return target.filter((key) => keySet.has(ignoreCase ? strToLowercase(key) : key))
     }
 
     return Object.keys(target).reduce((acc, key) => {
-        if (keys.includes(ignoreCase ? strToLowercase(key) : key)) {
+        if (keySet.has(ignoreCase ? strToLowercase(key) : key)) {
             ;(acc as Record<string, unknown>)[key] = target[key]
         }
 
@@ -78,28 +82,29 @@ export function kebabCase(string: string): string {
     if (!string) return ''
 
     return string
-        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
         .replace(/([a-z\d])([A-Z])/g, '$1-$2')
         .replace(/[\s_]+/g, '-')
         .replace(/-+/g, '-')
         .toLowerCase()
 }
 
-export function isStandardDomEvent(eventName: string): boolean {
-    const lowerEventName = eventName.toLowerCase()
-    const standardPatterns = [
-        /^on(click|dblclick|mousedown|mouseup|mouseover|mouseout|mousemove|mouseenter|mouseleave)$/,
-        /^on(keydown|keyup|keypress)$/,
-        /^on(focus|blur|change|input|submit|reset)$/,
-        /^on(load|unload|error|resize|scroll)$/,
-        /^on(touchstart|touchend|touchmove|touchcancel)$/,
-        /^on(pointerdown|pointerup|pointermove|pointerenter|pointerleave|pointercancel)$/,
-        /^on(drag|dragstart|dragend|dragenter|dragleave|dragover|drop)$/,
-        /^on(animationstart|animationend|animationiteration)$/,
-        /^on(transitionstart|transitionend|transitionrun|transitioncancel)$/,
-    ]
+const standardDomEventPattern = /* @__PURE__ */ new RegExp(
+    '^on(' +
+        'click|dblclick|mousedown|mouseup|mouseover|mouseout|mousemove|mouseenter|mouseleave|' +
+        'keydown|keyup|keypress|' +
+        'focus|blur|change|input|submit|reset|' +
+        'load|unload|error|resize|scroll|' +
+        'touchstart|touchend|touchmove|touchcancel|' +
+        'pointerdown|pointerup|pointermove|pointerenter|pointerleave|pointercancel|' +
+        'drag|dragstart|dragend|dragenter|dragleave|dragover|drop|' +
+        'animationstart|animationend|animationiteration|' +
+        'transitionstart|transitionend|transitionrun|transitioncancel' +
+        ')$',
+)
 
-    return standardPatterns.some((pattern) => pattern.test(lowerEventName))
+export function isStandardDomEvent(eventName: string): boolean {
+    return standardDomEventPattern.test(eventName.toLowerCase())
 }
 
 export function onceChildrenRendered(element: Element, callback: () => void): void {

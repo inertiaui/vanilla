@@ -18,12 +18,17 @@ export function onClickOutside(
         }
 
         // Check if the click target is inside a portal element
-        let node: Node | null = target
+        let node = target instanceof Element ? target : target?.parentElement
         while (node) {
-            if (node instanceof HTMLElement && node.hasAttribute('data-inertiaui-portal')) {
+            const portal = node.closest('[data-inertiaui-portal]')
+            if (!portal) {
+                break
+            }
+            if (portal instanceof HTMLElement) {
                 return
             }
-            node = node.parentNode
+            // SVG markers are not HTML portals; continue looking above them.
+            node = portal.parentElement
         }
 
         callback(event)
