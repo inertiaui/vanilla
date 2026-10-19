@@ -66,7 +66,10 @@ export function supportsTopLayerAnchorSizing(): boolean {
 
 // CSS Anchor Positioning approach
 const anchorStyleId = 'inertiaui-anchor-styles'
-const topLayerRules = new WeakMap<HTMLElement, { source: string; rule: CSSStyleRule; cssText: string }>()
+const anchorRules = new WeakMap<
+    HTMLElement,
+    { reference: HTMLElement; source: string; rule: CSSStyleRule; cssText: string }
+>()
 
 function ensureAnchorStylesheet(): CSSStyleSheet {
     let style = document.getElementById(anchorStyleId) as HTMLStyleElement | null
@@ -95,6 +98,31 @@ function removeAnchorRule(className: string): void {
     }
 }
 
+function updateAnchorRule(
+    reference: HTMLElement,
+    floating: HTMLElement,
+    className: string,
+    source: string,
+    sheet: CSSStyleSheet,
+): void {
+    const cached = anchorRules.get(floating)
+    // Rewriting an unchanged stylesheet rule invalidates styles across the page.
+    // Check the actual CSSOM as well, so edits, deletion and stylesheet replacement
+    // cannot leave an apparently reusable but stale rule behind.
+    if (
+        !cached ||
+        cached.reference !== reference ||
+        cached.source !== source ||
+        cached.rule.cssText !== cached.cssText ||
+        !Array.from(sheet.cssRules).includes(cached.rule)
+    ) {
+        removeAnchorRule(className)
+        const index = sheet.insertRule(source, sheet.cssRules.length)
+        const inserted = sheet.cssRules[index] as CSSStyleRule
+        anchorRules.set(floating, { reference, source, rule: inserted, cssText: inserted.cssText })
+    }
+}
+
 export function setupAnchorPositioning(
     reference: HTMLElement,
     floating: HTMLElement,
@@ -102,15 +130,26 @@ export function setupAnchorPositioning(
     offset: number,
     flip: boolean,
 ): string {
-    const id = generateId(ANCHOR_CLASS_PREFIX)
-    const anchorName = `--${id}`
+    const existingClass = findAnchorClass(floating)
+    const cached = anchorRules.get(floating)
+    const canReuseAnchor =
+        !!existingClass &&
+        cached?.reference === reference &&
+        reference.style.getPropertyValue('anchor-name') === `--${existingClass}` &&
+        floating.style.getPropertyValue('position-anchor') === `--${existingClass}`
+    const className = canReuseAnchor ? existingClass : generateId(ANCHOR_CLASS_PREFIX)
+    const anchorName = `--${className}`
+
+    if (!canReuseAnchor) {
+        detachAnchorPositioning(cached?.reference ?? reference, floating)
+    }
 
     setStyleProperty(reference.style, 'anchor-name', anchorName)
     setStyleProperty(floating.style, 'position-anchor', anchorName)
-    floating.style.position = 'fixed'
+    removeStyleProperty(floating.style, 'inset')
+    setStyleProperty(floating.style, 'position', 'fixed')
 
     const sheet = ensureAnchorStylesheet()
-    const className = id
 
     const positionRules = getAnchorPositionRules(placement, offset, isRightToLeft(reference))
     let tryFallback = ''
@@ -120,15 +159,15 @@ export function setupAnchorPositioning(
     }
 
     const rule = `.${className} { ${positionRules} ${tryFallback} }`
-    sheet.insertRule(rule, sheet.cssRules.length)
+    updateAnchorRule(reference, floating, className, rule, sheet)
 
-    floating.classList.add(className)
+    if (!floating.classList.contains(className)) floating.classList.add(className)
 
     return className
 }
 
 export function cleanupAnchorPositioning(reference: HTMLElement, floating: HTMLElement, className: string) {
-    topLayerRules.delete(floating)
+    anchorRules.delete(floating)
     removeStyleProperty(reference.style, 'anchor-name')
     removeStyleProperty(floating.style, 'position-anchor')
     floating.style.position = ''
@@ -138,7 +177,7 @@ export function cleanupAnchorPositioning(reference: HTMLElement, floating: HTMLE
 }
 
 export function detachAnchorPositioning(reference: HTMLElement, floating: HTMLElement): void {
-    topLayerRules.delete(floating)
+    anchorRules.delete(floating)
     reference.style.removeProperty('anchor-name')
     floating.style.removeProperty('position-anchor')
 
@@ -270,22 +309,7 @@ export function setupTopLayerAnchorPositioning(
     const heightRules = stretchToAvailableHeight ? getTopLayerAnchorSizingRules(placement, viewportMargin) : ''
     const rule = `.${className} { position: fixed; inset: auto; margin: 0; ${positionRules} ${tryFallbackRules} ${sizeRules} ${heightRules} }`
 
-    const cached = topLayerRules.get(floating)
-    // Rewriting an unchanged stylesheet rule invalidates styles across the page.
-    // Check the actual CSSOM as well, so edits, deletion and stylesheet replacement
-    // cannot leave an apparently reusable but stale rule behind.
-    if (
-        !canReuseAnchor ||
-        !cached ||
-        cached.source !== rule ||
-        cached.rule.cssText !== cached.cssText ||
-        !Array.from(sheet.cssRules).includes(cached.rule)
-    ) {
-        if (canReuseAnchor) removeAnchorRule(className)
-        const index = sheet.insertRule(rule, sheet.cssRules.length)
-        const inserted = sheet.cssRules[index] as CSSStyleRule
-        topLayerRules.set(floating, { source: rule, rule: inserted, cssText: inserted.cssText })
-    }
+    updateAnchorRule(reference, floating, className, rule, sheet)
     if (!floating.classList.contains(className)) floating.classList.add(className)
 
     return className

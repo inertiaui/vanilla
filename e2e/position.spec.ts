@@ -1,5 +1,49 @@
 import { test, expect } from './test'
 
+for (const change of ['placement and offset', 'flip', 'direction', 'reference']) {
+    test(`anchored computePosition updates ${change} on the same element`, async ({ page }) => {
+        const result = await page.evaluate(async (change) => {
+            const modulePath = '/src/index.ts'
+            const { computePosition, supportsAnchorPositioning } = await import(modulePath)
+            if (!supportsAnchorPositioning() || !CSS.supports('position-try-fallbacks', 'flip-block')) return null
+            const reference = document.createElement('button')
+            const replacement = document.createElement('button')
+            const floating = document.createElement('div')
+            reference.style.cssText = 'position:fixed;top:300px;left:300px;width:150px;height:30px'
+            replacement.style.cssText = 'position:fixed;top:400px;left:500px;width:150px;height:30px'
+            floating.style.cssText = 'width:80px;height:40px'
+            document.body.append(reference, replacement, floating)
+            const options = { placement: 'bottom-start', offset: 4, flip: false }
+            if (change === 'flip') reference.style.top = `${window.innerHeight - 40}px`
+            computePosition(reference, floating, options)
+            if (change === 'placement and offset') Object.assign(options, { placement: 'top-end', offset: 20 })
+            if (change === 'flip') options.flip = true
+            if (change === 'direction') reference.style.direction = 'rtl'
+            const active = change === 'reference' ? replacement : reference
+            computePosition(active, floating, options)
+            // CSS position-try selection may settle on the next rendering frame.
+            await new Promise(requestAnimationFrame)
+            await new Promise(requestAnimationFrame)
+            const rect = floating.getBoundingClientRect()
+            const ref = active.getBoundingClientRect()
+            const above = change === 'placement and offset' || change === 'flip'
+            const alignRight = change === 'placement and offset' || change === 'direction'
+            const sheet = (document.getElementById('inertiaui-anchor-styles') as HTMLStyleElement).sheet!
+            const original = sheet.cssRules[0]
+            for (let i = 0; i < 10; i++) computePosition(active, floating, options)
+            return {
+                verticalGap: above ? ref.top - rect.bottom : rect.top - ref.bottom,
+                alignmentError: alignRight ? rect.right - ref.right : rect.left - ref.left,
+                reused: sheet.cssRules.length === 1 && sheet.cssRules[0] === original,
+            }
+        }, change)
+        test.skip(!result, 'CSS anchor positioning and flip are unavailable')
+        expect(result!.verticalGap).toBeCloseTo(change === 'placement and offset' ? 20 : 4, 0)
+        expect(result!.alignmentError).toBeCloseTo(0, 0)
+        expect(result!.reused).toBe(true)
+    })
+}
+
 for (const anchorPositioning of [false, true]) {
     test(`non-flipping top-layer sizing follows changed width and content (anchors=${anchorPositioning})`, async ({
         page,
