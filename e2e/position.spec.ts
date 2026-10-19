@@ -1,5 +1,75 @@
 import { test, expect } from './test'
 
+for (const mode of ['generic', 'top-layer', 'mixed']) {
+    test(`shared anchors preserve both panels through fallback and cleanup (${mode})`, async ({ page }) => {
+        const result = await page.evaluate(async (mode) => {
+            const modulePath = '/src/index.ts'
+            const {
+                computePosition,
+                positionTopLayerPopover,
+                autoUpdate,
+                autoUpdateTopLayerPopover,
+                supportsTopLayerAnchorPositioning,
+            } = await import(modulePath)
+            if (!supportsTopLayerAnchorPositioning()) return null
+            const reference = document.createElement('button')
+            reference.style.cssText = 'position:fixed;top:300px;left:300px;width:150px;height:30px'
+            reference.style.setProperty('anchor-name', '--consumer, --other', 'important')
+            const panels = [document.createElement('div'), document.createElement('div')]
+            panels.forEach((panel, i) => {
+                panel.style.cssText = 'width:80px;height:40px;padding:0;border:0'
+                if (mode === 'top-layer' || (mode === 'mixed' && i === 1)) {
+                    panel.setAttribute('popover', 'manual')
+                }
+            })
+            document.body.append(reference, ...panels)
+            panels.forEach((panel) => {
+                if (panel.hasAttribute('popover')) panel.showPopover()
+            })
+            const functions = panels.map((_, i) =>
+                mode === 'top-layer' || (mode === 'mixed' && i === 1)
+                    ? [positionTopLayerPopover, autoUpdateTopLayerPopover]
+                    : [computePosition, autoUpdate],
+            )
+            const options = { placement: 'bottom-start', offset: 4, flip: false }
+            const cleanups = panels.map((panel, i) => {
+                functions[i][0](reference, panel, options)
+                return functions[i][1](reference, panel, () => {})
+            })
+            const measure = () =>
+                panels.map((panel) => {
+                    const rect = panel.getBoundingClientRect()
+                    const ref = reference.getBoundingClientRect()
+                    return { gap: rect.top - ref.bottom, alignment: rect.left - ref.left }
+                })
+            const both = measure()
+            const names = reference.style.getPropertyValue('anchor-name')
+            functions[0][0](reference, panels[0], { ...options, anchorPositioning: false })
+            const fallback = measure()
+            cleanups[0]()
+            reference.style.left = '350px'
+            const remaining = measure()[1]
+            cleanups[1]()
+            return {
+                both,
+                fallback,
+                remaining,
+                names,
+                restored: reference.style.getPropertyValue('anchor-name'),
+                priority: reference.style.getPropertyPriority('anchor-name'),
+            }
+        }, mode)
+        test.skip(!result, 'Top-layer CSS anchors are unavailable')
+        for (const rect of [...result!.both, ...result!.fallback, result!.remaining]) {
+            expect(rect.gap).toBeCloseTo(4, 0)
+            expect(rect.alignment).toBeCloseTo(0, 0)
+        }
+        expect(result!.names).toContain('--consumer, --other')
+        expect(result!.restored).toBe('--consumer, --other')
+        expect(result!.priority).toBe('important')
+    })
+}
+
 for (const change of ['placement and offset', 'flip', 'direction', 'reference']) {
     test(`anchored computePosition updates ${change} on the same element`, async ({ page }) => {
         const result = await page.evaluate(async (change) => {

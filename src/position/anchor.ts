@@ -1,7 +1,7 @@
 import { generateId } from '../helpers'
 import { isRightToLeft } from './geometry'
-import { removeStyleProperty, setStyleProperty } from './style'
-import type { Placement } from './types'
+import { captureStyleProperty, removeStyleProperty, restoreStyleProperty, setStyleProperty } from './style'
+import type { Placement, StoredStyleProperty } from './types'
 
 const ANCHOR_CLASS_PREFIX = 'iui-anchor-'
 
@@ -71,6 +71,79 @@ const anchorRules = new WeakMap<
     { reference: HTMLElement; source: string; rule: CSSStyleRule; cssText: string }
 >()
 
+type ReferenceAnchors = {
+    original: StoredStyleProperty
+    written: StoredStyleProperty
+    names: Set<string>
+}
+const referenceAnchors = new WeakMap<HTMLElement, ReferenceAnchors>()
+const anchorOwners = new WeakMap<HTMLElement, { reference: HTMLElement; className: string }>()
+
+function anchorNames(value: string): string[] {
+    return value
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name.startsWith('--'))
+}
+
+function syncReferenceAnchors(reference: HTMLElement, state: ReferenceAnchors): StoredStyleProperty {
+    const current = captureStyleProperty(reference.style, 'anchor-name')
+    if (current.value !== state.written.value || current.priority !== state.written.priority) {
+        // Consumer edits made while panels are open must survive the final release.
+        state.original = {
+            value:
+                anchorNames(current.value)
+                    .filter((name) => !state.names.has(name))
+                    .join(', ') || (current.value === 'none' ? 'none' : ''),
+            priority: current.priority,
+        }
+    }
+    return current
+}
+
+function acquireReferenceAnchor(reference: HTMLElement, floating: HTMLElement): string {
+    const owner = anchorOwners.get(floating)
+    const canReuse = owner?.reference === reference && floating.classList.contains(owner.className)
+    if (!canReuse) detachAnchorPositioning(reference, floating)
+    const className = canReuse ? owner.className : generateId(ANCHOR_CLASS_PREFIX)
+    const name = `--${className}`
+    let state = referenceAnchors.get(reference)
+    if (!state) {
+        const original = captureStyleProperty(reference.style, 'anchor-name')
+        state = { original, written: original, names: new Set() }
+        referenceAnchors.set(reference, state)
+    }
+    const current = syncReferenceAnchors(reference, state)
+    const names = anchorNames(current.value || getComputedStyle(reference).getPropertyValue('anchor-name'))
+    if (!names.includes(name)) {
+        names.push(name)
+        reference.style.setProperty('anchor-name', names.join(', '), current.priority)
+    }
+    state.names.add(name)
+    state.written = captureStyleProperty(reference.style, 'anchor-name')
+    anchorOwners.set(floating, { reference, className })
+    return className
+}
+
+function releaseReferenceAnchor(floating: HTMLElement): void {
+    const owner = anchorOwners.get(floating)
+    if (!owner) return
+    const { reference, className } = owner
+    const state = referenceAnchors.get(reference)!
+    const current = syncReferenceAnchors(reference, state)
+    const name = `--${className}`
+    state.names.delete(name)
+    if (state.names.size === 0) {
+        restoreStyleProperty(reference.style, 'anchor-name', state.original)
+        referenceAnchors.delete(reference)
+    } else {
+        const names = anchorNames(current.value).filter((entry) => entry !== name)
+        reference.style.setProperty('anchor-name', names.join(', '), current.priority)
+        state.written = captureStyleProperty(reference.style, 'anchor-name')
+    }
+    anchorOwners.delete(floating)
+}
+
 function ensureAnchorStylesheet(): CSSStyleSheet {
     let style = document.getElementById(anchorStyleId) as HTMLStyleElement | null
     if (!style) {
@@ -130,21 +203,9 @@ export function setupAnchorPositioning(
     offset: number,
     flip: boolean,
 ): string {
-    const existingClass = findAnchorClass(floating)
-    const cached = anchorRules.get(floating)
-    const canReuseAnchor =
-        !!existingClass &&
-        cached?.reference === reference &&
-        reference.style.getPropertyValue('anchor-name') === `--${existingClass}` &&
-        floating.style.getPropertyValue('position-anchor') === `--${existingClass}`
-    const className = canReuseAnchor ? existingClass : generateId(ANCHOR_CLASS_PREFIX)
+    const className = acquireReferenceAnchor(reference, floating)
     const anchorName = `--${className}`
 
-    if (!canReuseAnchor) {
-        detachAnchorPositioning(cached?.reference ?? reference, floating)
-    }
-
-    setStyleProperty(reference.style, 'anchor-name', anchorName)
     setStyleProperty(floating.style, 'position-anchor', anchorName)
     removeStyleProperty(floating.style, 'inset')
     setStyleProperty(floating.style, 'position', 'fixed')
@@ -168,7 +229,7 @@ export function setupAnchorPositioning(
 
 export function cleanupAnchorPositioning(reference: HTMLElement, floating: HTMLElement, className: string) {
     anchorRules.delete(floating)
-    removeStyleProperty(reference.style, 'anchor-name')
+    releaseReferenceAnchor(floating)
     removeStyleProperty(floating.style, 'position-anchor')
     floating.style.position = ''
     floating.classList.remove(className)
@@ -178,7 +239,7 @@ export function cleanupAnchorPositioning(reference: HTMLElement, floating: HTMLE
 
 export function detachAnchorPositioning(reference: HTMLElement, floating: HTMLElement): void {
     anchorRules.delete(floating)
-    reference.style.removeProperty('anchor-name')
+    releaseReferenceAnchor(floating)
     floating.style.removeProperty('position-anchor')
 
     for (const className of Array.from(floating.classList)) {
@@ -267,21 +328,10 @@ export function setupTopLayerAnchorPositioning(
     viewportMargin: number,
     stretchToAvailableHeight: boolean,
 ): string {
-    const existingClass = findAnchorClass(floating)
-    const existingAnchorName = existingClass ? `--${existingClass}` : ''
-    const canReuseAnchor =
-        !!existingClass &&
-        reference.style.getPropertyValue('anchor-name') === existingAnchorName &&
-        floating.style.getPropertyValue('position-anchor') === existingAnchorName
-    const className = canReuseAnchor ? existingClass : generateId(ANCHOR_CLASS_PREFIX)
+    const className = acquireReferenceAnchor(reference, floating)
     const anchorName = `--${className}`
     const sheet = ensureAnchorStylesheet()
 
-    if (!canReuseAnchor) {
-        detachAnchorPositioning(reference, floating)
-    }
-
-    setStyleProperty(reference.style, 'anchor-name', anchorName)
     setStyleProperty(floating.style, 'position-anchor', anchorName)
 
     removeStyleProperty(floating.style, 'inset')

@@ -212,3 +212,114 @@ describe('top-layer anchor rules', () => {
         expect(sheet().cssRules).toHaveLength(1)
     })
 })
+
+describe.each(['generic', 'top-layer', 'mixed'] as const)('shared reference anchors (%s)', (mode) => {
+    let reference: HTMLElement
+    let panels: HTMLElement[]
+    let anchor: typeof import('../src/position/anchor')
+    let positioning: typeof import('../src/position')
+    const sheet = () => (document.getElementById('inertiaui-anchor-styles') as HTMLStyleElement).sheet!
+    const position = (index: number, target = reference, numeric = false) => {
+        const topLayer = mode === 'top-layer' || (mode === 'mixed' && index === 1)
+        const fn = topLayer ? positioning.positionTopLayerPopover : positioning.computePosition
+        fn(target, panels[index], { placement: 'bottom-start', flip: false, anchorPositioning: !numeric })
+        return anchor.findAnchorClass(panels[index])!
+    }
+    const names = () =>
+        reference.style
+            .getPropertyValue('anchor-name')
+            .split(',')
+            .map((name) => name.trim())
+
+    beforeEach(async () => {
+        vi.resetModules()
+        vi.stubGlobal('CSS', { supports: (property: string) => property !== '-webkit-backdrop-filter' })
+        anchor = await import('../src/position/anchor')
+        positioning = await import('../src/position')
+        reference = document.createElement('button')
+        panels = [document.createElement('div'), document.createElement('div')]
+        document.body.append(reference, ...panels)
+    })
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+        document.body.innerHTML = ''
+        document.getElementById('inertiaui-anchor-styles')?.remove()
+    })
+
+    it.each([0, 1])('keeps both panels and consumer names through cleanup order %s', (first) => {
+        reference.style.setProperty('anchor-name', '--consumer, --other', 'important')
+        const classes = [position(0), position(1)]
+        expect(names()).toEqual(['--consumer', '--other', ...classes.map((name) => `--${name}`)])
+        expect(reference.style.getPropertyPriority('anchor-name')).toBe('important')
+        const rules = Array.from(sheet().cssRules)
+        const observer = new MutationObserver(() => {})
+        observer.observe(reference, { attributes: true })
+        observer.observe(panels[0], { attributes: true })
+        observer.observe(panels[1], { attributes: true })
+        for (let i = 0; i < 3; i++) {
+            expect(position(0)).toBe(classes[0])
+            expect(position(1)).toBe(classes[1])
+        }
+        expect(observer.takeRecords()).toHaveLength(0)
+        observer.disconnect()
+        rules.forEach((rule, index) => expect(sheet().cssRules[index]).toBe(rule))
+        anchor.cleanupAnchorPositioning(reference, panels[first], classes[first])
+        expect(names()).toEqual(['--consumer', '--other', `--${classes[1 - first]}`])
+        expect(sheet().cssRules[0]).toBe(rules[1 - first])
+        expect(position(1 - first)).toBe(classes[1 - first])
+        anchor.detachAnchorPositioning(reference, panels[1 - first])
+        expect(reference.style.getPropertyValue('anchor-name')).toBe('--consumer, --other')
+        expect(reference.style.getPropertyPriority('anchor-name')).toBe('important')
+        expect(sheet().cssRules).toHaveLength(0)
+    })
+
+    it.each([false, true])('releases the actual old reference when switching references (numeric=%s)', (numeric) => {
+        const classes = [position(0), position(1)]
+        const replacement = document.createElement('button')
+        replacement.style.setProperty('anchor-name', '--replacement', 'important')
+        document.body.prepend(replacement)
+        position(0, replacement, numeric)
+        expect(names()).toEqual([`--${classes[1]}`])
+        expect(replacement.style.getPropertyValue('anchor-name')).toContain('--replacement')
+        expect(replacement.style.getPropertyPriority('anchor-name')).toBe('important')
+        // Cleanup may still receive the reference captured by autoUpdate.
+        anchor.detachAnchorPositioning(reference, panels[0])
+        expect(replacement.style.getPropertyValue('anchor-name')).toBe('--replacement')
+        expect(names()).toEqual([`--${classes[1]}`])
+        position(1, reference, true)
+        expect(reference.style.getPropertyValue('anchor-name')).toBe('')
+    })
+
+    it('leaves the other panel anchored during numeric fallback and repeated detach', () => {
+        const classes = [position(0), position(1)]
+        position(0, reference, true)
+        anchor.detachAnchorPositioning(reference, panels[0])
+        expect(names()).toEqual([`--${classes[1]}`])
+        expect(position(1)).toBe(classes[1])
+        position(1, reference, true)
+        expect(reference.style.getPropertyValue('anchor-name')).toBe('')
+        expect(sheet().cssRules).toHaveLength(0)
+    })
+
+    it('preserves consumer changes made while panels are anchored', () => {
+        const classes = [position(0), position(1)]
+        reference.style.setProperty('anchor-name', `${names().join(', ')}, --added`, 'important')
+        position(0)
+        anchor.detachAnchorPositioning(reference, panels[0])
+        expect(names()).toEqual([`--${classes[1]}`, '--added'])
+        anchor.detachAnchorPositioning(reference, panels[1])
+        expect(reference.style.getPropertyValue('anchor-name')).toBe('--added')
+        expect(reference.style.getPropertyPriority('anchor-name')).toBe('important')
+    })
+
+    it('restores an explicit none declaration and its priority', () => {
+        reference.style.setProperty('anchor-name', 'none', 'important')
+        position(0)
+        position(1)
+        anchor.detachAnchorPositioning(reference, panels[0])
+        anchor.detachAnchorPositioning(reference, panels[1])
+        expect(reference.style.getPropertyValue('anchor-name')).toBe('none')
+        expect(reference.style.getPropertyPriority('anchor-name')).toBe('important')
+    })
+})
