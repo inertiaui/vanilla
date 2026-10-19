@@ -62,8 +62,6 @@ interface AutoScrollerController {
     stop: CleanupFunction
     /** Stop permanently and cancel all pending work. Idempotent. */
     cleanup: CleanupFunction
-    /** True when an auto-scroll animation frame is pending. */
-    isScrolling: () => boolean
 }
 
 interface ReorderInsertionOptions {
@@ -825,7 +823,6 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         update,
         stop,
         cleanup,
-        isScrolling: () => frameId !== null,
     }
 }
 
@@ -868,12 +865,8 @@ interface PointerReorderController {
      * whose composed path contains an element carrying the handle attribute.
      */
     pointerDown: (index: number, event: PointerEvent) => void
-    /** Current interaction state. */
-    getState: () => PointerReorderState
     /** Pointer positions of the active drag. */
     getPointer: () => ReorderPointer | null
-    /** True while a pointer drag is active. */
-    isDragging: () => boolean
     /** End a pending press or active drag without committing it. */
     cancel: () => void
     /** Cancel any active drag and remove all window listeners. Idempotent. */
@@ -1406,9 +1399,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
     return {
         pointerDown,
-        getState: currentState,
         getPointer: () => (activePointer ? pointer : null),
-        isDragging: () => activePointer !== null,
         cancel,
         cleanup,
     }
