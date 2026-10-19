@@ -48,6 +48,9 @@ export function hexToHsl(hex: string): HslColor {
  * Returns string with leading '#'.
  */
 export function hslToHex(h: number, s: number, l: number): string {
+    h %= 360
+    if (h < 0) h += 360
+
     s /= 100
     l /= 100
 

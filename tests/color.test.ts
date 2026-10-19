@@ -34,6 +34,32 @@ describe('hexToHsl / hslToHex (existing compatibility)', () => {
         expect(hslToHex(120, 100, 50)).toBe('#00ff00')
         expect(hslToHex(240, 100, 50)).toBe('#0000ff')
     })
+
+    it.each([
+        [360, '#ff0000'],
+        [720, '#ff0000'],
+        [-360, '#ff0000'],
+        [420, '#ffff00'],
+        [-60, '#ff00ff'],
+    ])('wraps hue %s before conversion', (h, expected) => {
+        expect(hslToHex(h, 100, 50)).toBe(expected)
+    })
+
+    it('converts rounded hexToHsl hue at the end of the hue cycle', () => {
+        const { h, s, l } = hexToHsl('#ff0001')
+        expect({ h, s, l }).toEqual({ h: 360, s: 100, l: 50 })
+        expect(hslToHex(h, s, l)).toBe('#ff0000')
+    })
+
+    it.each([
+        [0.5, '#ff0200'],
+        [359.5, '#ff0002'],
+        [360.5, '#ff0200'],
+        [720.5, '#ff0200'],
+        [-0.5, '#ff0002'],
+    ])('preserves fractional hue %s when wrapping', (h, expected) => {
+        expect(hslToHex(h, 100, 50)).toBe(expected)
+    })
 })
 
 describe('normalize helpers', () => {
