@@ -11,12 +11,11 @@ function strToLowercase(key: string): string {
     return key.toLowerCase()
 }
 
-export function except<T extends Record<string, unknown>>(target: T, keys: string[], ignoreCase?: boolean): Partial<T>
-export function except(target: string[], keys: string[], ignoreCase?: boolean): string[]
-export function except<T extends Record<string, unknown>>(
+function filterKeys<T extends Record<string, unknown>>(
     target: T | string[],
     keys: string[],
-    ignoreCase = false,
+    ignoreCase: boolean,
+    include: boolean,
 ): Partial<T> | string[] {
     if (ignoreCase) {
         keys = keys.map(strToLowercase)
@@ -25,16 +24,26 @@ export function except<T extends Record<string, unknown>>(
     const keySet = new Set(keys)
 
     if (Array.isArray(target)) {
-        return target.filter((key) => !keySet.has(ignoreCase ? strToLowercase(key) : key))
+        return target.filter((key) => keySet.has(ignoreCase ? strToLowercase(key) : key) === include)
     }
 
     return Object.keys(target).reduce((acc, key) => {
-        if (!keySet.has(ignoreCase ? strToLowercase(key) : key)) {
+        if (keySet.has(ignoreCase ? strToLowercase(key) : key) === include) {
             ;(acc as Record<string, unknown>)[key] = target[key]
         }
 
         return acc
     }, {} as Partial<T>)
+}
+
+export function except<T extends Record<string, unknown>>(target: T, keys: string[], ignoreCase?: boolean): Partial<T>
+export function except(target: string[], keys: string[], ignoreCase?: boolean): string[]
+export function except<T extends Record<string, unknown>>(
+    target: T | string[],
+    keys: string[],
+    ignoreCase = false,
+): Partial<T> | string[] {
+    return filterKeys(target, keys, ignoreCase, false)
 }
 
 export function only<T extends Record<string, unknown>>(target: T, keys: string[], ignoreCase?: boolean): Partial<T>
@@ -44,23 +53,7 @@ export function only<T extends Record<string, unknown>>(
     keys: string[],
     ignoreCase = false,
 ): Partial<T> | string[] {
-    if (ignoreCase) {
-        keys = keys.map(strToLowercase)
-    }
-
-    const keySet = new Set(keys)
-
-    if (Array.isArray(target)) {
-        return target.filter((key) => keySet.has(ignoreCase ? strToLowercase(key) : key))
-    }
-
-    return Object.keys(target).reduce((acc, key) => {
-        if (keySet.has(ignoreCase ? strToLowercase(key) : key)) {
-            ;(acc as Record<string, unknown>)[key] = target[key]
-        }
-
-        return acc
-    }, {} as Partial<T>)
+    return filterKeys(target, keys, ignoreCase, true)
 }
 
 export function rejectNullValues<T>(target: T[]): Exclude<T, null>[]
