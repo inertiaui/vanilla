@@ -391,9 +391,10 @@ describe('createReorderableList', () => {
         container.remove()
     })
 
-    it('auto-scrolls while pointer dragging', () => {
+    it.each(['custom containers', 'slotted handle'])('auto-scrolls while pointer dragging with %s', (scenario) => {
         let frame: FrameRequestCallback | null = null
         const container = document.createElement('div')
+        const host = document.createElement('div')
         const handle = document.createElement('button')
         let items = ['alpha', 'beta']
         const controller = createReorderableList({
@@ -401,11 +402,10 @@ describe('createReorderableList', () => {
             setItems: (nextItems) => {
                 items = nextItems
             },
-            autoScroll: {
-                getScrollContainers: () => [container],
-            },
+            autoScroll: scenario === 'slotted handle' ? { axis: 'y' } : { getScrollContainers: () => [container] },
         })
 
+        container.style.overflowY = 'auto'
         Object.defineProperties(container, {
             clientHeight: { value: 100, configurable: true },
             scrollHeight: { value: 300, configurable: true },
@@ -414,8 +414,18 @@ describe('createReorderableList', () => {
         })
         container.getBoundingClientRect = () => rect(0, 0, 100, 100)
         handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
-        container.append(handle)
-        document.body.append(container)
+        document.body.append(host)
+        if (scenario === 'slotted handle') {
+            const slot = document.createElement('slot')
+            host.attachShadow({ mode: 'open' }).append(container)
+            container.append(slot)
+            host.append(handle)
+            // Happy DOM does not assign slots; the browser suite covers native assignment.
+            Object.defineProperty(handle, 'assignedSlot', { value: slot })
+        } else {
+            host.append(container)
+            container.append(handle)
+        }
         for (const index of [0, 1]) {
             const row = document.createElement('div')
             row.getBoundingClientRect = () =>
@@ -433,18 +443,20 @@ describe('createReorderableList', () => {
             frame = null
         })
 
-        controller.pointerDown(
-            0,
-            makeEvent('pointerdown', [handle, container, document.body, document, window], container),
-        )
-        window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 98 }))
+        try {
+            controller.pointerDown(
+                0,
+                makeEvent('pointerdown', [handle, container, document.body, document, window], container),
+            )
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 98 }))
 
-        frame?.(16)
+            frame?.(16)
 
-        expect(container.scrollTop).toBeGreaterThan(0)
-
-        controller.cleanup()
-        container.remove()
+            expect(container.scrollTop).toBeGreaterThan(0)
+        } finally {
+            controller.cleanup()
+            host.remove()
+        }
     })
 
     it('auto-scrolls right-to-left containers both ways', () => {

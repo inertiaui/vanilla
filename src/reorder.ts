@@ -425,6 +425,10 @@ function isShadowRoot(value: unknown): value is ShadowRoot {
 }
 
 function getParentNodeAcrossShadowDom(node: Node): Node | null {
+    if (node instanceof Element && node.assignedSlot) {
+        return node.assignedSlot
+    }
+
     if (node.parentNode) {
         return node.parentNode
     }

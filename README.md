@@ -564,7 +564,7 @@ The offsets describe the movement between the items packed in their current orde
 
 ### getScrollableAncestors
 
-`getScrollableAncestors(element, axis?)` lists the ancestors of an element that can scroll, nearest first, followed by its window. It crosses shadow roots through their hosts. Pass `'x'` or `'y'` to keep only the ancestors that scroll along that axis, for example to give a horizontal list's auto-scroll a fixed set of containers for the whole drag:
+`getScrollableAncestors(element, axis?)` lists the ancestors of an element that can scroll, nearest first, followed by its window. It follows assigned slots and crosses shadow roots through their hosts. Pass `'x'` or `'y'` to keep only the ancestors that scroll along that axis, for example to give a horizontal list's auto-scroll a fixed set of containers for the whole drag:
 
 ```ts
 import { createReorderableList, getScrollableAncestors, type AutoScrollContainer } from '@inertiaui/vanilla'

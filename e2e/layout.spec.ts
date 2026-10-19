@@ -30,6 +30,23 @@ test('finds scrollable ancestors along an axis from inside a shadow root', async
     ])
 })
 
+test('finds the scrollable shadow ancestors that contain slotted content', async ({ page }) => {
+    const ancestors = await page.evaluate(() => {
+        const host = document.querySelector('#host')!
+        host.shadowRoot!.innerHTML = '<div id="slot-scroll" style="width: 100px; overflow: auto"><slot></slot></div>'
+        const item = document.createElement('div')
+        item.style.width = '300px'
+        item.style.height = '20px'
+        host.append(item)
+
+        return window.layout
+            .getScrollableAncestors(item, 'x')
+            .map((container) => (container === window ? 'window' : (container as Element).id))
+    })
+
+    expect(ancestors).toEqual(['slot-scroll', 'horizontal', 'window'])
+})
+
 test('offsets match where a flex layout with gaps puts the reordered items', async ({ page }) => {
     const results = await page.evaluate(() => {
         const check = (list: HTMLElement, order: number[], options: { axis: 'x' | 'y'; reverse?: boolean }) => {
