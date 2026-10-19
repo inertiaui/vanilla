@@ -44,6 +44,8 @@ export type {
     ReorderCommitContext,
     ReorderDirection,
     ReorderMove,
+    ReorderPoint,
+    ReorderPointer,
     ReorderPreviewItem,
     ReorderableListController,
     ReorderableListOptions,

@@ -9,9 +9,16 @@ export const REORDERABLE_LIST_HANDLE_ATTRIBUTE = 'data-reorderable-list-handle'
 export type ReorderDirection = 'up' | 'down'
 export type ReorderSource = 'keyboard' | 'pointer'
 
-type ReorderPoint = {
+export type ReorderPoint = {
     clientX: number
     clientY: number
+}
+
+export type ReorderPointer = {
+    /** Where the press started. */
+    readonly origin: ReorderPoint
+    /** The latest pointer position. */
+    readonly position: ReorderPoint
 }
 
 type ReorderHitBox = ReorderBounds & {
@@ -101,6 +108,14 @@ export interface ReorderableListOptions<T> {
     getBounds?: () => ReorderBounds | null
     /** Optional edge auto-scroll while pointer-dragging. Disabled by default. */
     autoScroll?: boolean | AutoScrollerOptions
+    /**
+     * Pointer travel in CSS pixels before a press starts dragging. Until then the
+     * press keeps its native click, focus, and scrolling. Defaults to 0, which
+     * starts dragging on press.
+     */
+    activationDistance?: number
+    /** Ignore the click that follows a pointer drag, so releasing over a control does not activate it. Defaults to false. */
+    suppressClickAfterDrag?: boolean
     /** Called whenever pointer drag state changes. */
     onChange?: (state: ReorderableListState) => void
     /** Called immediately before items are written or `onReorder` fires. */
@@ -124,7 +139,18 @@ export interface ReorderableListController<T> {
     moveItem: (index: number, direction: ReorderDirection) => ReorderMove<T> | null
     /** Begin a pointer reorder from a registered handle event. */
     pointerDown: (index: number, event: PointerEvent) => void
-    /** Cancel active pointer work and remove global listeners. Idempotent. */
+    /**
+     * Pointer positions of the active drag, or null while idle and before a press
+     * starts dragging. The object lives for the whole gesture and its `position`
+     * is replaced as the pointer moves, so copy the values you need to keep.
+     */
+    getPointer: () => ReorderPointer | null
+    /**
+     * End a pending press or active pointer drag without committing it. An active
+     * drag notifies `onChange` with the idle state. The controller stays usable.
+     */
+    cancel: () => void
+    /** Cancel active pointer work and remove global listeners without notifying `onChange`. Idempotent. */
     cleanup: CleanupFunction
 }
 
@@ -620,6 +646,10 @@ interface PointerReorderOptions {
     canReorder?: () => boolean
     /** Optional edge auto-scroll while pointer-dragging. Disabled by default. */
     autoScroll?: boolean | AutoScrollerOptions
+    /** Pointer travel before a press starts dragging. Defaults to 0. */
+    activationDistance?: number
+    /** Ignore the click that follows a drag. Defaults to false. */
+    suppressClickAfterDrag?: boolean
     /** Called whenever the dragged/target/insertion indices change (drag start, move, end). */
     onChange?: (state: PointerReorderState) => void
     /** Called once on pointer up with a resolved, in-range move. */
@@ -637,8 +667,12 @@ interface PointerReorderController {
     pointerDown: (index: number, event: PointerEvent) => void
     /** Current interaction state. */
     getState: () => PointerReorderState
+    /** Pointer positions of the active drag. */
+    getPointer: () => ReorderPointer | null
     /** True while a pointer drag is active. */
     isDragging: () => boolean
+    /** End a pending press or active drag without committing it. */
+    cancel: () => void
     /** Cancel any active drag and remove all window listeners. Idempotent. */
     cleanup: CleanupFunction
 }
@@ -754,6 +788,8 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
         getBounds,
         canReorder,
         autoScroll: options.autoScroll ?? false,
+        activationDistance: options.activationDistance,
+        suppressClickAfterDrag: options.suppressClickAfterDrag,
         onChange: (state) => {
             if (state.draggedIndex !== null) {
                 lastPreviewedPointerTargetIndex = state.targetIndex
@@ -815,6 +851,8 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
             })
         },
         pointerDown: pointerReorder.pointerDown,
+        getPointer: pointerReorder.getPointer,
+        cancel: pointerReorder.cancel,
         cleanup: () => {
             pointerReorder.cleanup()
             dragHitBoxes = null
@@ -832,16 +870,25 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
  */
 function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
     const canReorder = () => (options.canReorder?.() ?? true) && options.getItemCount() > 1
+    const isValidIndex = (index: number) => Number.isInteger(index) && index >= 0 && index < options.getItemCount()
     let activePointer: {
         fromIndex: number
         pointerId: number
         captureElement: HTMLElement | null
         scrollElement: HTMLElement | null
     } | null = null
+    // A press that has not yet travelled the activation distance.
+    let pendingPointer: {
+        fromIndex: number
+        pointerId: number
+        handle: HTMLElement
+    } | null = null
+    let pointer: { origin: ReorderPoint; position: ReorderPoint } | null = null
     let insertionIndex: number | null = null
     let pointerOverReorderArea = false
     let lastPoint: ReorderPoint | null = null
     let cleaned = false
+    const activationDistance = finiteNumber(options.activationDistance, 0)
     const autoScrollOptions = options.autoScroll === true ? {} : options.autoScroll || null
     const autoScroller = autoScrollOptions
         ? createAutoScroller({
@@ -904,6 +951,10 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
             clientY: event.clientY,
         }
 
+        if (pointer) {
+            pointer.position = lastPoint
+        }
+
         updateInsertionIndex(lastPoint)
 
         if (shouldAutoScroll) {
@@ -917,7 +968,10 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
         window.removeEventListener('pointermove', handleWindowPointerMove)
         window.removeEventListener('pointerup', handleWindowPointerUp)
         window.removeEventListener('pointercancel', handleWindowPointerCancel)
+        window.removeEventListener('blur', cancel)
         activePointer = null
+        pendingPointer = null
+        pointer = null
         insertionIndex = null
         pointerOverReorderArea = false
         lastPoint = null
@@ -940,6 +994,26 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerMove(event: PointerEvent) {
+        const pending = pendingPointer
+
+        if (pending?.pointerId === event.pointerId && pointer) {
+            if (
+                Math.hypot(event.clientX - pointer.origin.clientX, event.clientY - pointer.origin.clientY) <
+                activationDistance
+            ) {
+                return
+            }
+
+            pendingPointer = null
+
+            if (!canReorder() || !isValidIndex(pending.fromIndex)) {
+                stop()
+                return
+            }
+
+            activate(pending.fromIndex, event, pending.handle)
+        }
+
         if (activePointer?.pointerId !== event.pointerId) {
             return
         }
@@ -950,21 +1024,25 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerUp(event: PointerEvent) {
-        const pointer = activePointer
+        if (pendingPointer?.pointerId === event.pointerId) {
+            stop()
+            return
+        }
 
-        if (!pointer || pointer.pointerId !== event.pointerId) {
+        const active = activePointer
+
+        if (!active || active.pointerId !== event.pointerId) {
             return
         }
 
         event.preventDefault()
 
-        const fromIndex = pointer.fromIndex
+        const fromIndex = active.fromIndex
         const toIndex = pointerOverReorderArea
             ? resolveTargetIndexFromInsertion(fromIndex, insertionIndex, options.getItemCount())
             : null
 
-        stop()
-        emitChange()
+        end()
 
         if (toIndex !== null && fromIndex !== toIndex) {
             options.onCommit(fromIndex, toIndex, 'pointer')
@@ -972,12 +1050,38 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerCancel(event: PointerEvent) {
-        if (activePointer?.pointerId !== event.pointerId) {
-            return
+        if (pendingPointer?.pointerId === event.pointerId) {
+            stop()
+        } else if (activePointer?.pointerId === event.pointerId) {
+            // A canceled pointer does not produce a click to suppress.
+            end(false)
+        }
+    }
+
+    /** Stop an active drag and report the idle state, keeping its click from activating whatever is under the pointer. */
+    function end(suppressFollowingClick = options.suppressClickAfterDrag ?? false) {
+        stop()
+
+        if (suppressFollowingClick) {
+            window.addEventListener('click', suppressClick, { capture: true })
+            window.addEventListener('pointerdown', releaseClick, { capture: true })
+            window.addEventListener('keydown', releaseClick, { capture: true })
         }
 
-        stop()
         emitChange()
+    }
+
+    function suppressClick(event: MouseEvent) {
+        event.preventDefault()
+        event.stopPropagation()
+        releaseClick()
+    }
+
+    // A new press or key is a fresh interaction, so a drag that produced no click never swallows a later one.
+    function releaseClick() {
+        window.removeEventListener('click', suppressClick, { capture: true })
+        window.removeEventListener('pointerdown', releaseClick, { capture: true })
+        window.removeEventListener('keydown', releaseClick, { capture: true })
     }
 
     function bindPointerCapture(element: HTMLElement, pointerId: number): HTMLElement | null {
@@ -997,29 +1101,59 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     function pointerDown(index: number, event: PointerEvent) {
         const handle = findReorderHandle(event)
 
-        if (cleaned || !canReorder() || activePointer || event.button !== 0 || event.isPrimary === false || !handle) {
+        if (
+            cleaned ||
+            !canReorder() ||
+            !isValidIndex(index) ||
+            activePointer ||
+            pendingPointer ||
+            event.button !== 0 ||
+            event.isPrimary === false ||
+            !handle
+        ) {
             return
         }
 
-        options.onStart()
-        event.preventDefault()
-        const captureElement = bindPointerCapture(handle, event.pointerId)
-        activePointer = {
-            fromIndex: index,
-            pointerId: event.pointerId,
-            captureElement,
-            scrollElement: handle,
-        }
-        insertionIndex = index
-        pointerOverReorderArea = true
+        const origin = { clientX: event.clientX, clientY: event.clientY }
+        pointer = { origin, position: origin }
 
         // Keep the window listeners as a compatibility path for older browsers
         // and for synthetic tests that dispatch pointer events on window.
         window.addEventListener('pointermove', handleWindowPointerMove, { passive: false })
         window.addEventListener('pointerup', handleWindowPointerUp)
         window.addEventListener('pointercancel', handleWindowPointerCancel)
+        window.addEventListener('blur', cancel)
 
+        if (activationDistance > 0) {
+            pendingPointer = { fromIndex: index, pointerId: event.pointerId, handle }
+            return
+        }
+
+        activate(index, event, handle)
         emitChange()
+    }
+
+    /** Turn an accepted press into a drag: measure, claim the pointer, and stop native defaults. */
+    function activate(fromIndex: number, event: PointerEvent, handle: HTMLElement) {
+        options.onStart()
+        event.preventDefault()
+        const captureElement = bindPointerCapture(handle, event.pointerId)
+        activePointer = {
+            fromIndex,
+            pointerId: event.pointerId,
+            captureElement,
+            scrollElement: handle,
+        }
+        insertionIndex = fromIndex
+        pointerOverReorderArea = true
+    }
+
+    function cancel() {
+        if (activePointer) {
+            end()
+        } else if (pendingPointer) {
+            stop()
+        }
     }
 
     function cleanup() {
@@ -1029,13 +1163,16 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
         cleaned = true
         stop()
+        releaseClick()
         autoScroller?.cleanup()
     }
 
     return {
         pointerDown,
         getState: currentState,
+        getPointer: () => (activePointer ? pointer : null),
         isDragging: () => activePointer !== null,
+        cancel,
         cleanup,
     }
 }

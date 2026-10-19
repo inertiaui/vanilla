@@ -460,6 +460,37 @@ moveUpButton.addEventListener('click', () => controller.moveItem(index, 'up'))
 
 Use `getPreviewOrder()` or `getPreviewItems()` during pointer dragging when your renderer needs to show the future order before release. The reorder detail includes `alreadyPreviewed`, so consumers can avoid replaying the same release animation when the list already animated into the committed position.
 
+#### Dragging from clickable content
+
+By default a press on a handle starts dragging immediately: the controller prevents the browser's default action, captures the pointer, and reports the drag through `onChange`. When the handle is also a button or a label that should keep working on click, set `activationDistance`. A press then stays an ordinary press until the pointer travels that many CSS pixels, so clicks, focus, and native scrolling behave as usual. Releasing earlier ends the press without notifying `onChange`.
+
+Pair it with `suppressClickAfterDrag` so the click the browser sends after a drag does not activate the control under the pointer. Only that one click is ignored: the next press or key press clears the suppression, so a later click or keyboard activation still works.
+
+```typescript
+const controller = createReorderableList({
+    getItems: () => columns,
+    setItems: (nextColumns) => (columns = nextColumns),
+    activationDistance: 4,
+    suppressClickAfterDrag: true,
+    onChange: (state) => {
+        const pointer = controller.getPointer()
+
+        if (state.draggedIndex !== null && pointer) {
+            // Keep the dragged item under the pointer.
+            translate(state.draggedIndex, pointer.position.clientX - pointer.origin.clientX)
+        }
+    },
+})
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') controller.cancel()
+})
+```
+
+`getPointer()` returns the press origin and latest position while a drag is active, and `null` otherwise. The object lasts for the whole gesture, and its `position` is replaced on every move, so read it during `onChange` and copy any values you need to keep.
+
+`cancel()` ends a pending press or an active drag without committing it. Losing window focus also cancels the gesture. An active drag reports the idle state through `onChange`, and the controller remains usable for the next press. `cleanup()` also ends any gesture, but silently, for unmounting. A browser `pointercancel` ends the gesture without suppressing a later click, since the canceled pointer does not generate one.
+
 #### Reorderable List Options
 
 | Option | Type | Default | Description |
@@ -469,9 +500,26 @@ Use `getPreviewOrder()` or `getPreviewItems()` during pointer dragging when your
 | `canReorder` | `() => boolean` | `true` | Guard before starting or committing a reorder |
 | `getBounds` | `() => ReorderBounds \| null` | Registered list rect | Optional outer active area |
 | `autoScroll` | `boolean \| AutoScrollerOptions` | `false` | Edge auto-scroll while dragging |
+| `activationDistance` | `number` | `0` | Pointer travel in CSS pixels before a press starts dragging |
+| `suppressClickAfterDrag` | `boolean` | `false` | Ignore the click that follows a pointer drag |
 | `onChange` | `(state) => void` | `undefined` | Called when pointer drag state changes |
 | `onBeforeReorder` | `(move, context) => void` | `undefined` | Called before writing items or firing `onReorder` |
 | `onReorder` | `(move, context) => void` | `undefined` | Called after a valid keyboard or pointer reorder |
+
+#### Reorderable List Controller
+
+| Method | Description |
+|--------|-------------|
+| `setListElement(element)` | Register the outer list element used for default bounds and auto-scroll ancestry |
+| `setItemElement(index, element)` | Register or unregister an item element by index |
+| `getItemElements()` | Registered item elements ordered by index |
+| `getPreviewOrder()` | Item indices in their live pointer preview order |
+| `getPreviewItems()` | Items with their source and visual indices for the live preview |
+| `moveItem(index, direction)` | Commit an `'up'` or `'down'` keyboard reorder |
+| `pointerDown(index, event)` | Begin a pointer reorder from a handle's `pointerdown` event |
+| `getPointer()` | Origin and latest position of the active drag, or `null` |
+| `cancel()` | End a pending press or active drag without committing it |
+| `cleanup()` | End any gesture silently and remove listeners |
 
 ## Positioning
 
@@ -1743,6 +1791,8 @@ import type {
     ReorderCommitContext,
     ReorderDirection,
     ReorderMove,
+    ReorderPoint,
+    ReorderPointer,
     ReorderPreviewItem,
     ReorderableListController,
     ReorderableListOptions,

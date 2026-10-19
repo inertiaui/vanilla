@@ -606,4 +606,256 @@ describe('createReorderableList', () => {
             controller.cleanup()
         }
     })
+
+    describe('activation distance', () => {
+        function setup(options: Partial<Parameters<typeof createReorderableList<number>>[0]> = {}) {
+            const handle = document.createElement('button')
+            handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            handle.setPointerCapture = vi.fn()
+            document.body.append(handle)
+            let items = [0, 1, 2]
+            const onChange = vi.fn()
+            const onReorder = vi.fn()
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getBounds: () => ({ left: 0, top: -Infinity, right: 100, bottom: Infinity }),
+                activationDistance: 4,
+                onChange,
+                onReorder,
+                ...options,
+            })
+            for (let index = 0; index < 3; index++) {
+                const element = document.createElement('div')
+                element.getBoundingClientRect = () => rect(0, index * 50, 100, index * 50 + 40)
+                controller.setItemElement(index, element)
+            }
+            const press = (clientY = 20, index = 0) => {
+                const event = makeEvent('pointerdown', [handle, document.body, document, window], handle, {
+                    clientX: 50,
+                    clientY,
+                })
+                controller.pointerDown(index, event)
+
+                return event
+            }
+            const move = (clientY: number) =>
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX: 50, clientY }))
+            const release = (clientY: number) =>
+                window.dispatchEvent(makeEvent('pointerup', [window], window, { clientX: 50, clientY }))
+            const click = () => {
+                const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+                handle.dispatchEvent(event)
+
+                return event.defaultPrevented
+            }
+
+            return { handle, controller, onChange, onReorder, press, move, release, click, items: () => items }
+        }
+
+        it('leaves a press alone until the pointer travels the distance', () => {
+            const { handle, controller, onChange, press, move } = setup()
+            try {
+                expect(press().defaultPrevented).toBe(false)
+                move(22)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(handle.setPointerCapture).not.toHaveBeenCalled()
+                expect(controller.getPointer()).toBeNull()
+
+                move(80)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex: 2, targetIndex: 1 })
+                expect(handle.setPointerCapture).toHaveBeenCalledWith(1)
+                expect(controller.getPointer()).toEqual({
+                    origin: { clientX: 50, clientY: 20 },
+                    position: { clientX: 50, clientY: 80 },
+                })
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('discards a press released before the distance', () => {
+            const { handle, controller, onChange, onReorder, press, move, release, click } = setup()
+            try {
+                press()
+                release(21)
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(onReorder).not.toHaveBeenCalled()
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('cancels pending and active gestures without committing, and stays usable', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup()
+            try {
+                press()
+                controller.cancel()
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                controller.cancel()
+                expect(onChange).toHaveBeenLastCalledWith({
+                    draggedIndex: null,
+                    insertionIndex: null,
+                    targetIndex: null,
+                })
+                expect(controller.getPointer()).toBeNull()
+                release(80)
+                expect(onReorder).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                release(80)
+                expect(onReorder).toHaveBeenCalledWith(
+                    { item: 0, fromIndex: 0, toIndex: 1, source: 'pointer' },
+                    { alreadyPreviewed: true },
+                )
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('ends a gesture silently on cleanup', () => {
+            const { handle, controller, onChange, press, move } = setup()
+            press()
+            move(80)
+            onChange.mockClear()
+            controller.cleanup()
+            move(120)
+            expect(onChange).not.toHaveBeenCalled()
+            handle.remove()
+        })
+
+        it('ignores invalid source indexes before preventing native interaction', () => {
+            for (const activationDistance of [0, 4]) {
+                const { handle, controller, onChange, press, move, release } = setup({ activationDistance })
+                try {
+                    for (const index of [-1, 3, 0.5, NaN, Infinity]) {
+                        expect(press(20, index).defaultPrevented).toBe(false)
+                        move(80)
+                        release(80)
+                    }
+                    expect(onChange).not.toHaveBeenCalled()
+                    expect(handle.setPointerCapture).not.toHaveBeenCalled()
+                } finally {
+                    controller.cleanup()
+                    handle.remove()
+                }
+            }
+        })
+
+        it('rechecks the pending source index when items disappear before activation', () => {
+            let items = [0, 1, 2]
+            const { handle, controller, onChange, press, move } = setup({ getItems: () => items })
+            try {
+                press(120, 2)
+                items = [0, 1]
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(controller.getPointer()).toBeNull()
+                expect(handle.setPointerCapture).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                expect(controller.getPointer()).not.toBeNull()
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('ends pending and active gestures when the window loses focus', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup()
+            try {
+                press()
+                window.dispatchEvent(new Event('blur'))
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                window.dispatchEvent(new Event('blur'))
+                expect(controller.getPointer()).toBeNull()
+                expect(onChange).toHaveBeenLastCalledWith({
+                    draggedIndex: null,
+                    insertionIndex: null,
+                    targetIndex: null,
+                })
+                release(80)
+                expect(onReorder).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                release(80)
+                expect(onReorder).toHaveBeenCalledOnce()
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('does not suppress an unrelated click after the browser cancels a pointer', () => {
+            const { handle, controller, press, move, click } = setup({ suppressClickAfterDrag: true })
+            try {
+                press()
+                move(80)
+                window.dispatchEvent(makeEvent('pointercancel', [window], window))
+                expect(controller.getPointer()).toBeNull()
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('suppresses only the click that follows a drag', () => {
+            const { handle, controller, press, move, release, click } = setup({ suppressClickAfterDrag: true })
+            try {
+                press()
+                release(20)
+                expect(click()).toBe(false)
+
+                press()
+                move(80)
+                release(80)
+                expect(click()).toBe(true)
+                expect(click()).toBe(false)
+
+                press()
+                move(80)
+                controller.cancel()
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('keeps activating on press by default', () => {
+            const { handle, controller, onChange, press } = setup({ activationDistance: undefined })
+            try {
+                expect(press().defaultPrevented).toBe(true)
+                expect(handle.setPointerCapture).toHaveBeenCalledWith(1)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex: 0, targetIndex: 0 })
+                expect(controller.getPointer()).toEqual({
+                    origin: { clientX: 50, clientY: 20 },
+                    position: { clientX: 50, clientY: 20 },
+                })
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+    })
 })
