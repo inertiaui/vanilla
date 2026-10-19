@@ -854,6 +854,35 @@ test('switches between CSS anchors and numeric positioning without retaining old
     expect(result.anchored.y).toBeCloseTo(260, 0)
 })
 
+for (const switchFromAnchors of [false, true]) {
+    test(`measures auto-width content in fixed positioning (switch from anchors: ${switchFromAnchors})`, async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async (switchFromAnchors) => {
+            const modulePath = '/src/index.ts'
+            const { computePosition } = await import(modulePath)
+            const reference = document.createElement('button')
+            const floating = document.createElement('div')
+            reference.style.cssText = 'position:fixed;left:400px;top:300px;width:100px;height:30px'
+            floating.style.cssText = 'max-width:180px;margin:0;padding:8px;border:0;box-sizing:border-box'
+            floating.textContent = 'Short tooltip'
+            document.body.append(reference, floating)
+            if (switchFromAnchors) {
+                computePosition(reference, floating, { placement: 'top', flip: false })
+            }
+            computePosition(reference, floating, { placement: 'top', offset: 6, anchorPositioning: false })
+            const rect = floating.getBoundingClientRect()
+            const result = { center: rect.left + rect.width / 2, bottom: rect.bottom, width: rect.width }
+            reference.remove()
+            floating.remove()
+            return result
+        }, switchFromAnchors)
+        expect(result.width).toBeLessThan(180)
+        expect(result.center).toBeCloseTo(450, 0)
+        expect(result.bottom).toBeCloseTo(294, 0)
+    })
+}
+
 test('keeps numeric positioning stable while the floating element scales', async ({ page }) => {
     const positions = await page.evaluate(async () => {
         const modulePath = '/src/index.ts'

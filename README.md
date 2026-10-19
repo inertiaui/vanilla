@@ -953,6 +953,8 @@ popover.addEventListener('focusout', (event) => {
 
 `createTooltipController(options)` coordinates hover and focus intent, delayed opening, positioning, Escape dismissal, and cleanup. It never moves focus. It keeps a tooltip open while either pointer or keyboard focus remains in its trigger, and ignores completion of an obsolete closing transition.
 
+The default `position` is `{ placement: 'top', offset: 6, anchorPositioning: false }`. Tooltips use numeric positioning unless `position.anchorPositioning` is `true` and the browser supports CSS anchors.
+
 ```ts
 import { createTooltipController } from '@inertiaui/vanilla'
 

@@ -77,6 +77,11 @@ export function computePosition(
     const anchorClass = findAnchorClass(floating)
     if (anchorClass) cleanupAnchorPositioning(reference, floating, anchorClass)
 
+    // Measure auto-width content in the same positioning mode used to display it.
+    floating.style.position = 'fixed'
+    // Native popovers default to inset: 0. Only the computed edges should position them.
+    floating.style.inset = 'auto'
+
     // JS fallback. Pre-size with the requested side so a tall element is already
     // capped before positioning, avoiding a first-frame clamp to the viewport edge.
     let referenceRect: DOMRect | undefined
@@ -85,9 +90,6 @@ export function computePosition(
         applySize(reference, floating, offset, placement.split('-')[0], referenceRect)
     }
     const result = computeWithFallback(reference, floating, { placement, offset, flip }, referenceRect)
-    floating.style.position = 'fixed'
-    // Native popovers default to inset: 0. Only the computed edges should position them.
-    floating.style.inset = 'auto'
     floating.style.top = `${result.y}px`
     floating.style.left = `${result.x}px`
     if (autoSize) {
