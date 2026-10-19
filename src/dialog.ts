@@ -327,7 +327,6 @@ interface AriaHiddenState {
 }
 
 interface InertState {
-    originalAriaHidden: string | null
     originalInert: boolean
     count: number
 }
@@ -400,22 +399,19 @@ export function markInert(elementOrSelector: HTMLElement | string): CleanupFunct
         return function noop() {}
     }
 
+    if (!supportsNativeInert(element)) {
+        return markAriaHidden(element)
+    }
+
     const existing = inertStates.get(element)
 
     if (existing) {
         existing.count++
     } else {
-        const originalAriaHidden = element.getAttribute('aria-hidden')
-        const hasNativeInert = supportsNativeInert(element)
-        const originalInert = hasNativeInert ? (element as NativeInertElement).inert : false
+        const originalInert = (element as NativeInertElement).inert
 
-        inertStates.set(element, { originalAriaHidden, originalInert, count: 1 })
-
-        if (hasNativeInert) {
-            ;(element as NativeInertElement).inert = true
-        } else {
-            element.setAttribute('aria-hidden', 'true')
-        }
+        inertStates.set(element, { originalInert, count: 1 })
+        ;(element as NativeInertElement).inert = true
     }
 
     let cleaned = false
@@ -438,18 +434,7 @@ function unmarkInert(element: HTMLElement): void {
     item.count--
 
     if (item.count <= 0) {
-        const { originalAriaHidden, originalInert } = item
-
-        if (supportsNativeInert(element)) {
-            ;(element as NativeInertElement).inert = originalInert
-        }
-
-        if (originalAriaHidden === null) {
-            element.removeAttribute('aria-hidden')
-        } else {
-            element.setAttribute('aria-hidden', originalAriaHidden)
-        }
-
+        ;(element as NativeInertElement).inert = item.originalInert
         inertStates.delete(element)
     }
 }

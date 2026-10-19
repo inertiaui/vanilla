@@ -94,6 +94,56 @@ describe('dialog accessibility state', () => {
             release()
         }
     })
+
+    describe.each([true, false])('overlapping marks with native inert=%s', (nativeInert) => {
+        describe.each([true, false])('acquire aria-hidden first=%s', (ariaFirst) => {
+            describe.each([true, false])('release aria-hidden first=%s', (releaseAriaFirst) => {
+                it.each([null, 'false', 'true'])('restores original aria-hidden=%j', (original) => {
+                    const target = document.createElement('div')
+                    if (original !== null) target.setAttribute('aria-hidden', original)
+                    const element = nativeInert
+                        ? target
+                        : new Proxy(target, {
+                              has(target, key) {
+                                  return key === 'inert' ? false : Reflect.has(target, key)
+                              },
+                              get(target, key) {
+                                  const value = Reflect.get(target, key, target)
+                                  return typeof value === 'function' ? value.bind(target) : value
+                              },
+                          })
+                    expect('inert' in element).toBe(nativeInert)
+                    const releaseFirst = (ariaFirst ? markAriaHidden : markInert)(element)
+                    const releaseSecond = (ariaFirst ? markInert : markAriaHidden)(element)
+                    const releaseAria = ariaFirst ? releaseFirst : releaseSecond
+                    const releaseInert = ariaFirst ? releaseSecond : releaseFirst
+                    const releaseNestedAria = markAriaHidden(element)
+                    const releaseNestedInert = markInert(element)
+
+                    releaseNestedAria()
+                    releaseNestedAria()
+                    releaseNestedInert()
+                    releaseNestedInert()
+                    expect.soft(target.getAttribute('aria-hidden')).toBe('true')
+                    if (nativeInert) expect.soft(target.inert).toBe(true)
+
+                    const releaseEarlier = releaseAriaFirst ? releaseAria : releaseInert
+                    const releaseLater = releaseAriaFirst ? releaseInert : releaseAria
+                    releaseEarlier()
+                    releaseEarlier()
+                    expect
+                        .soft(target.getAttribute('aria-hidden'))
+                        .toBe(releaseAriaFirst && nativeInert ? original : 'true')
+                    if (nativeInert) expect.soft(target.inert).toBe(releaseAriaFirst)
+
+                    releaseLater()
+                    releaseLater()
+                    expect.soft(target.getAttribute('aria-hidden')).toBe(original)
+                    if (nativeInert) expect.soft(target.inert).toBe(false)
+                })
+            })
+        })
+    })
 })
 
 describe('focus trap recovery', () => {
