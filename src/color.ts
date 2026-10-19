@@ -190,6 +190,13 @@ export function rgbToHex(r: number, g: number, b: number): string {
     return `#${[r, g, b].map((channel) => clamp(Math.round(channel), 0, 255).toString(16).padStart(2, '0')).join('')}`
 }
 
+function parseChannelNumber(token: string): number | null {
+    if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)%?$/.test(token)) return null
+
+    const number = Number.parseFloat(token)
+    return Number.isFinite(number) ? number : null
+}
+
 /**
  * Parse an alpha channel from a raw string as found in rgba()/hsla() notation.
  *
@@ -202,9 +209,9 @@ export function parseAlphaChannel(rawAlpha: string | undefined): number | null {
     if (rawAlpha === undefined || rawAlpha.trim() === '') return 1
 
     const trimmed = rawAlpha.trim()
-    const number = Number.parseFloat(trimmed)
+    const number = parseChannelNumber(trimmed)
 
-    if (!Number.isFinite(number)) return null
+    if (number === null) return null
 
     if (trimmed.endsWith('%')) {
         if (number < 0 || number > 100) return null
@@ -226,9 +233,9 @@ export function parseAlphaChannel(rawAlpha: string | undefined): number | null {
  */
 export function parseRgbChannel(rawChannel: string): number | null {
     const trimmed = rawChannel.trim()
-    const number = Number.parseFloat(trimmed)
+    const number = parseChannelNumber(trimmed)
 
-    if (!Number.isFinite(number)) return null
+    if (number === null) return null
 
     if (trimmed.endsWith('%')) {
         if (number < 0 || number > 100) return null
