@@ -643,6 +643,7 @@ The function applies positioning styles to the floating element automatically (`
 | `offset` | `number` | `0` | Distance in pixels between reference and floating element |
 | `flip` | `boolean` | `true` | Flip to opposite side when overflowing viewport |
 | `autoSize` | `boolean` | `false` | Constrain the floating element to the available viewport space (sets `max-height` and `overflow-y: auto`) |
+| `anchorPositioning` | `boolean` | `true` | Use CSS anchors when supported. Set to `false` to use numeric positioning. |
 
 #### Placements
 
@@ -951,6 +952,8 @@ popover.addEventListener('focusout', (event) => {
 ## Tooltip Controllers
 
 `createTooltipController(options)` coordinates hover and focus intent, delayed opening, positioning, Escape dismissal, and cleanup. It never moves focus. It keeps a tooltip open while either pointer or keyboard focus remains in its trigger, and ignores completion of an obsolete closing transition.
+
+The default `position` is `{ placement: 'top', offset: 6, anchorPositioning: false }`. Tooltips use numeric positioning unless `position.anchorPositioning` is `true` and the browser supports CSS anchors.
 
 ```ts
 import { createTooltipController } from '@inertiaui/vanilla'

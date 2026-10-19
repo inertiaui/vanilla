@@ -173,7 +173,7 @@ export function resolveTopLayerPlacement(
 
 export function computePositionFromRect(
     refRect: DOMRect,
-    floatingRect: DOMRect,
+    floatingRect: FloatingSize,
     placement: Placement,
     offset: number,
     rtl = isRtl(),
@@ -230,7 +230,7 @@ export function computePositionFromRect(
     return { x, y }
 }
 
-function wouldOverflow(x: number, y: number, floatingRect: DOMRect, placement: Placement): boolean {
+function wouldOverflow(x: number, y: number, floatingRect: FloatingSize, placement: Placement): boolean {
     const [side] = placement.split('-')
     const vw = window.innerWidth
     const vh = window.innerHeight
@@ -249,7 +249,7 @@ function wouldOverflow(x: number, y: number, floatingRect: DOMRect, placement: P
     }
 }
 
-function clampToViewport(x: number, y: number, floatingRect: DOMRect): { x: number; y: number } {
+function clampToViewport(x: number, y: number, floatingRect: FloatingSize): { x: number; y: number } {
     const vw = window.innerWidth
     const vh = window.innerHeight
     const margin = 4
@@ -269,7 +269,8 @@ export function computeWithFallback(
     const { placement = 'bottom-start', offset = 0, flip = true } = options
 
     const refRect = referenceRect ?? reference.getBoundingClientRect()
-    const floatingRect = floating.getBoundingClientRect()
+    // Position against layout size so entrance transforms do not move the anchor.
+    const floatingRect = { width: floating.offsetWidth, height: floating.offsetHeight }
 
     const rtl = isRightToLeft(reference)
     let { x, y } = computePositionFromRect(refRect, floatingRect, placement, offset, rtl)

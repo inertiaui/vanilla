@@ -787,7 +787,8 @@ describe('start and end placements', () => {
             const floating = document.createElement('div')
             reference.style.direction = referenceDirection
             reference.getBoundingClientRect = () => rect(300, 100, 500, 140)
-            floating.getBoundingClientRect = () => rect(0, 0, 100, 50)
+            vi.spyOn(floating, 'offsetWidth', 'get').mockReturnValue(100)
+            vi.spyOn(floating, 'offsetHeight', 'get').mockReturnValue(50)
             document.body.append(reference, floating)
 
             expect(computePosition(reference, floating, { placement: 'bottom-start' }).x).toBe(start)
