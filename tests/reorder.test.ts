@@ -201,6 +201,42 @@ describe('createReorderableList', () => {
         controller.cleanup()
     })
 
+    it.each([
+        [0.5, 'down'],
+        [1.5, 'up'],
+        [NaN, 'up'],
+        [NaN, 'down'],
+        [Infinity, 'up'],
+        [Infinity, 'down'],
+        [-Infinity, 'up'],
+        [-Infinity, 'down'],
+        [-1, 'down'],
+        [3, 'up'],
+        [0, 'up'],
+        [2, 'down'],
+    ] as const)('rejects invalid keyboard indices for moveItem(%s, %s)', (index, direction) => {
+        const originalItems = ['alpha', 'beta', 'gamma']
+        let items = originalItems
+        const setItems = vi.fn((nextItems: string[]) => {
+            items = nextItems
+        })
+        const onBeforeReorder = vi.fn()
+        const onReorder = vi.fn()
+        const controller = createReorderableList({ getItems: () => items, setItems, onBeforeReorder, onReorder })
+
+        try {
+            const move = controller.moveItem(index, direction)
+            expect.soft(items).toEqual(['alpha', 'beta', 'gamma'])
+            expect.soft(items).toBe(originalItems)
+            expect.soft(setItems).not.toHaveBeenCalled()
+            expect.soft(onBeforeReorder).not.toHaveBeenCalled()
+            expect.soft(onReorder).not.toHaveBeenCalled()
+            expect.soft(move).toBeNull()
+        } finally {
+            controller.cleanup()
+        }
+    })
+
     it('ignores disabled, out-of-range, and missing-handle reorders', () => {
         const container = document.createElement('div')
         const handle = document.createElement('button')
@@ -972,14 +1008,18 @@ describe('createReorderableList', () => {
 
         it('ignores invalid source indexes before preventing native interaction', () => {
             for (const activationDistance of [0, 4]) {
-                const { handle, controller, onChange, press, move, release } = setup({ activationDistance })
+                const { handle, controller, onChange, onReorder, items, press, move, release } = setup({
+                    activationDistance,
+                })
                 try {
-                    for (const index of [-1, 3, 0.5, NaN, Infinity]) {
+                    for (const index of [-1, 3, 0.5, NaN, Infinity, -Infinity]) {
                         expect(press(20, index).defaultPrevented).toBe(false)
                         move(80)
                         release(80)
                     }
                     expect(onChange).not.toHaveBeenCalled()
+                    expect(onReorder).not.toHaveBeenCalled()
+                    expect(items()).toEqual([0, 1, 2])
                     expect(handle.setPointerCapture).not.toHaveBeenCalled()
                 } finally {
                     controller.cleanup()

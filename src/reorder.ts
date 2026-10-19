@@ -907,6 +907,10 @@ function getRegisteredItemElements(itemElements: Map<number, HTMLElement>): HTML
         .map(([, element]) => element)
 }
 
+function isValidReorderIndex(index: number, itemCount: number): boolean {
+    return Number.isInteger(index) && index >= 0 && index < itemCount
+}
+
 /**
  * Framework-neutral list reorder controller. It combines item registration,
  * live pointer preview ordering, keyboard moves, pointer commits, bounds, and
@@ -961,10 +965,8 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
         if (
             !canReorder() ||
             fromIndex === toIndex ||
-            fromIndex < 0 ||
-            toIndex < 0 ||
-            fromIndex >= items.length ||
-            toIndex >= items.length
+            !isValidReorderIndex(fromIndex, items.length) ||
+            !isValidReorderIndex(toIndex, items.length)
         ) {
             return null
         }
@@ -1081,7 +1083,6 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
  */
 function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
     const canReorder = () => (options.canReorder?.() ?? true) && options.getItemCount() > 1
-    const isValidIndex = (index: number) => Number.isInteger(index) && index >= 0 && index < options.getItemCount()
     let activePointer: {
         fromIndex: number
         pointerId: number
@@ -1241,7 +1242,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
             pendingPointer = null
 
-            if (!canReorder() || !isValidIndex(pending.fromIndex)) {
+            if (!canReorder() || !isValidReorderIndex(pending.fromIndex, options.getItemCount())) {
                 stop()
                 return
             }
@@ -1339,7 +1340,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
         if (
             cleaned ||
             !canReorder() ||
-            !isValidIndex(index) ||
+            !isValidReorderIndex(index, options.getItemCount()) ||
             activePointer ||
             pendingPointer ||
             event.button !== 0 ||
