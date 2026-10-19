@@ -396,7 +396,7 @@ describe('createReorderableList', () => {
         const container = document.createElement('div')
         const host = document.createElement('div')
         const handle = document.createElement('button')
-        let items = ['alpha', 'beta']
+        let items = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta']
         const controller = createReorderableList({
             getItems: () => items,
             setItems: (nextItems) => {
@@ -426,7 +426,7 @@ describe('createReorderableList', () => {
             host.append(container)
             container.append(handle)
         }
-        for (const index of [0, 1]) {
+        for (const index of [0, 1, 2, 3, 4, 5]) {
             const row = document.createElement('div')
             row.getBoundingClientRect = () =>
                 rect(0, index * 50 - container.scrollTop, 100, index * 50 + 50 - container.scrollTop)
@@ -450,14 +450,122 @@ describe('createReorderableList', () => {
             )
             window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 98 }))
 
-            frame?.(16)
+            for (let timestamp = 16; timestamp <= 160; timestamp += 16) {
+                frame?.(timestamp)
+            }
 
-            expect(container.scrollTop).toBeGreaterThan(0)
+            expect(container.scrollTop).toBeCloseTo(110.4)
+            window.dispatchEvent(makeEvent('pointerup', [window], window, { clientX: 50, clientY: 98 }))
+            expect(items).toEqual(['beta', 'gamma', 'delta', 'alpha', 'epsilon', 'zeta'])
         } finally {
             controller.cleanup()
             host.remove()
         }
     })
+
+    it.each(['vertical', 'horizontal', 'rtl', 'window', 'slotted items'])(
+        'updates %s targets after manual scrolling without remeasuring previews',
+        (direction) => {
+            const outer = document.createElement('div')
+            const container = document.createElement('div')
+            const handle = document.createElement('button')
+            const horizontal = direction === 'horizontal' || direction === 'rtl'
+            const rtl = direction === 'rtl'
+            const scrollProperty = horizontal ? 'scrollLeft' : 'scrollTop'
+            const sign = rtl ? -1 : 1
+            let items = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta']
+            const getCollisionPoint = vi.fn((pointer: ReorderPointer, _item: ReorderBounds) => pointer.position)
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getCollisionPoint,
+            })
+            container.style.direction = rtl ? 'rtl' : 'ltr'
+            // Programmatic scrolling of overflow:hidden ancestors also displaces the items.
+            container.style.overflow = outer.style.overflow = 'hidden'
+            container[scrollProperty] = sign * 20
+            outer[scrollProperty] = sign * 10
+            container.getBoundingClientRect = () => rect(0, 0, 100, 100)
+            handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            container.append(handle)
+            const slot = document.createElement('slot')
+            if (direction === 'slotted items') {
+                outer.attachShadow({ mode: 'open' }).append(container)
+                container.append(slot)
+            } else {
+                outer.append(container)
+            }
+            document.body.append(outer)
+            controller.setListElement(container)
+            const root = document.documentElement
+            const rootScrollTop = root.scrollTop
+            if (direction === 'window') {
+                vi.stubGlobal('scrollY', 10)
+                root.scrollTop = 10
+            }
+
+            const measurements = items.map((_, index) => {
+                const row = document.createElement('div')
+                const start = rtl ? 50 - index * 50 : index * 50
+                const bounds = horizontal ? rect(start, 0, start + 50, 100) : rect(0, start, 100, start + 50)
+                const measure = vi
+                    .fn()
+                    .mockReturnValueOnce(bounds)
+                    .mockReturnValue(rect(500, 500, 600, 600))
+                row.getBoundingClientRect = measure
+                if (direction === 'slotted items') {
+                    outer.append(row)
+                    Object.defineProperty(row, 'assignedSlot', { value: slot })
+                } else {
+                    container.append(row)
+                }
+                controller.setItemElement(index, row)
+                return measure
+            })
+            const point = { clientX: horizontal ? (rtl ? 2 : 98) : 50, clientY: horizontal ? 50 : 98 }
+
+            try {
+                controller.pointerDown(0, makeEvent('pointerdown', [handle, container], container))
+                window.dispatchEvent(makeEvent('pointermove', [window], window, point))
+                expect(controller.getPreviewOrder()).toEqual([1, 0, 2, 3, 4, 5])
+
+                if (direction === 'window') {
+                    vi.stubGlobal('scrollY', 120)
+                    // The root exposes the same scroll as window; count it only once.
+                    root.scrollTop = 120
+                } else {
+                    container[scrollProperty] += sign * 70
+                    outer[scrollProperty] += sign * 40
+                }
+                window.dispatchEvent(makeEvent('pointermove', [window], window, point))
+                expect(controller.getPreviewOrder()).toEqual([1, 2, 3, 0, 4, 5])
+                // Repeated moves must not accumulate the same displacement or read preview transforms.
+                window.dispatchEvent(makeEvent('pointermove', [window], window, point))
+                expect(controller.getPreviewOrder()).toEqual([1, 2, 3, 0, 4, 5])
+                expect(getCollisionPoint).toHaveBeenCalledTimes(3)
+                for (const [, item] of getCollisionPoint.mock.calls) {
+                    expect(item).toEqual(
+                        expect.objectContaining({
+                            left: rtl ? 50 : 0,
+                            top: 0,
+                            right: horizontal ? (rtl ? 100 : 50) : 100,
+                            bottom: horizontal ? 100 : 50,
+                        }),
+                    )
+                }
+                measurements.forEach((measure) => expect(measure).toHaveBeenCalledTimes(1))
+
+                window.dispatchEvent(makeEvent('pointerup', [window], window, point))
+                expect(items).toEqual(['beta', 'gamma', 'delta', 'alpha', 'epsilon', 'zeta'])
+            } finally {
+                controller.cleanup()
+                outer.remove()
+                root.scrollTop = rootScrollTop
+            }
+        },
+    )
 
     it('auto-scrolls right-to-left containers both ways', () => {
         let frame: FrameRequestCallback | null = null
