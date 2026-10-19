@@ -6,7 +6,7 @@ const FOCUSABLE_SELECTORS = [
     'select:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
 ]
-    .map((selector) => `${selector}:not([aria-hidden="true"])`)
+    .map((selector) => `${selector}:not([aria-hidden="true"]):not(input[type="hidden"])`)
     .join(', ')
 
 let scrollLockCount = 0
