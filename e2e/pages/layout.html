@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Layout</title>
+        <link rel="stylesheet" href="shared.css" />
+        <style>
+            #vertical {
+                height: 120px;
+                overflow: auto;
+            }
+
+            #horizontal {
+                width: 200px;
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+            #host {
+                display: block;
+                width: 600px;
+                height: 40px;
+            }
+
+            #column {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                width: 160px;
+                margin: 0;
+                padding: 0;
+                list-style: none;
+            }
+
+            #row {
+                display: flex;
+                flex-direction: row-reverse;
+                gap: 6px;
+                width: max-content;
+            }
+
+            #column > *,
+            #row > * {
+                background: #e5e7eb;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Layout</h1>
+
+        <div id="vertical">
+            <div style="height: 400px">
+                <div id="horizontal"><div id="host"></div></div>
+            </div>
+        </div>
+
+        <ul id="column">
+            <li style="height: 20px">A</li>
+            <li style="height: 44px">B</li>
+            <li style="height: 12px">C</li>
+        </ul>
+
+        <div id="row">
+            <span style="width: 30px">A</span>
+            <span style="width: 72px">B</span>
+            <span style="width: 18px">C</span>
+        </div>
+
+        <script type="module">
+            import { createLayoutAnimation, captureAnimationSnapshot } from '../../src/animate.ts'
+            import { getReorderOffsets, getScrollableAncestors } from '../../src/reorder.ts'
+
+            document.querySelector('#host').attachShadow({ mode: 'open' }).innerHTML =
+                '<span>Inside a shadow root</span>'
+            window.layout = {
+                captureAnimationSnapshot,
+                createLayoutAnimation,
+                getReorderOffsets,
+                getScrollableAncestors,
+            }
+        </script>
+    </body>
+</html>

@@ -72,6 +72,8 @@ interface ReorderInsertionOptions {
      * headers or empty padding. Item midpoint math still uses the item boxes.
      */
     bounds?: ReorderBounds | null
+    /** Read rows from right to left, as the list is written. */
+    rightToLeft?: boolean
 }
 
 export type ReorderPreviewItem<T> = {
@@ -116,6 +118,15 @@ export interface ReorderableListOptions<T> {
     activationDistance?: number
     /** Ignore the click that follows a pointer drag, so releasing over a control does not activate it. Defaults to false. */
     suppressClickAfterDrag?: boolean
+    /**
+     * Point that picks the drop slot while pointer-dragging, given the pointer and
+     * the dragged item's box as measured when the drag started. Returning the
+     * item's leading edge lets items of different sizes swap once the dragged
+     * item covers half of a neighbor. The point is clamped to the items' extent,
+     * and returning null uses the pointer, which is also the default. Whether a
+     * release drops or cancels always follows the pointer itself.
+     */
+    getCollisionPoint?: (pointer: ReorderPointer, item: ReorderBounds) => ReorderPoint | null
     /** Called whenever pointer drag state changes. */
     onChange?: (state: ReorderableListState) => void
     /** Called immediately before items are written or `onReorder` fires. */
@@ -185,6 +196,40 @@ function isHTMLElement(value: unknown): value is HTMLElement {
     return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement
 }
 
+function isMeasuredHitBox(hitBox: ReorderHitBox): boolean {
+    return (
+        Number.isFinite(hitBox.index) &&
+        Number.isFinite(hitBox.left) &&
+        Number.isFinite(hitBox.top) &&
+        Number.isFinite(hitBox.right) &&
+        Number.isFinite(hitBox.bottom) &&
+        hitBox.left <= hitBox.right &&
+        hitBox.top <= hitBox.bottom
+    )
+}
+
+/** Move a point inside the area the measured items cover. */
+function clampToHitBoxes(hitBoxes: readonly ReorderHitBox[], point: ReorderPoint): ReorderPoint {
+    let left = Infinity
+    let top = Infinity
+    let right = -Infinity
+    let bottom = -Infinity
+
+    for (const hitBox of hitBoxes) {
+        if (isMeasuredHitBox(hitBox)) {
+            left = Math.min(left, hitBox.left)
+            top = Math.min(top, hitBox.top)
+            right = Math.max(right, hitBox.right)
+            bottom = Math.max(bottom, hitBox.bottom)
+        }
+    }
+
+    return {
+        clientX: Math.min(Math.max(point.clientX, left), right),
+        clientY: Math.min(Math.max(point.clientY, top), bottom),
+    }
+}
+
 /**
  * Resolve the insertion index for vertical lists and multi-item rows. Select
  * the first matching item by index (or left edge within a row) in one pass,
@@ -205,17 +250,14 @@ function getInsertionIndexFromPoint(
     let rowCount = 0
     let rowMatch: ReorderHitBox | null = null
     let rowLast: ReorderHitBox | null = null
+    // Where rowMatch and rowLast start along the row's reading direction.
+    let rowMatchStart = 0
+    let rowLastStart = 0
+    // Right-to-left rows read mirrored, so their first item is the rightmost.
+    const reading = options.rightToLeft ? -1 : 1
 
     for (const hitBox of hitBoxes) {
-        if (
-            !Number.isFinite(hitBox.index) ||
-            !Number.isFinite(hitBox.left) ||
-            !Number.isFinite(hitBox.top) ||
-            !Number.isFinite(hitBox.right) ||
-            !Number.isFinite(hitBox.bottom) ||
-            hitBox.left > hitBox.right ||
-            hitBox.top > hitBox.bottom
-        ) {
+        if (!isMeasuredHitBox(hitBox)) {
             continue
         }
 
@@ -232,22 +274,19 @@ function getInsertionIndexFromPoint(
         }
 
         if (point.clientY >= hitBox.top && point.clientY <= hitBox.bottom) {
-            // Rows use visual left-to-right order, with item index breaking ties.
+            // Rows use visual order in their reading direction, with item index breaking ties.
             rowCount++
-            if (
-                !rowLast ||
-                hitBox.left > rowLast.left ||
-                (hitBox.left === rowLast.left && hitBox.index > rowLast.index)
-            ) {
+            const start = options.rightToLeft ? -hitBox.right : hitBox.left
+            if (!rowLast || start > rowLastStart || (start === rowLastStart && hitBox.index > rowLast.index)) {
                 rowLast = hitBox
+                rowLastStart = start
             }
             if (
-                point.clientX <= hitBox.left + (hitBox.right - hitBox.left) / 2 &&
-                (!rowMatch ||
-                    hitBox.left < rowMatch.left ||
-                    (hitBox.left === rowMatch.left && hitBox.index < rowMatch.index))
+                reading * point.clientX <= reading * (hitBox.left + (hitBox.right - hitBox.left) / 2) &&
+                (!rowMatch || start < rowMatchStart || (start === rowMatchStart && hitBox.index < rowMatch.index))
             ) {
                 rowMatch = hitBox
+                rowMatchStart = start
             }
         }
     }
@@ -291,6 +330,86 @@ function resolveTargetIndexFromInsertion(
     }
 
     return targetIndex
+}
+
+export interface ReorderOffsetsOptions {
+    /** Axis the items are laid out along. Defaults to `'y'`. */
+    axis?: 'x' | 'y'
+    /** The items run toward the start of the axis, as in a right-to-left row. Defaults to false. */
+    reverse?: boolean
+    /**
+     * Space between neighboring items, used for both orders. Defaults to the gap
+     * each slot has now, which suits lists whose items are measured where they lie
+     * in the flow. Pass 0 for items that touch, such as table cells, when some boxes
+     * are measured elsewhere, for instance stuck in place by sticky positioning.
+     */
+    gap?: number
+}
+
+function isPermutation(order: readonly number[], count: number): boolean {
+    if (order.length !== count) {
+        return false
+    }
+
+    const seen = new Uint8Array(count)
+
+    for (const index of order) {
+        if (!Number.isInteger(index) || index < 0 || index >= count || seen[index]) {
+            return false
+        }
+
+        seen[index] = 1
+    }
+
+    return true
+}
+
+/**
+ * Return how far each item moves along the axis when the items are laid out in
+ * `order`, a permutation of their indices. The offsets describe the movement
+ * between the items packed in their current order and packed in `order`, so items
+ * of different sizes line up and an unchanged order returns zero offsets. Each gap
+ * between neighboring slots stays in place, or is `gap` in both layouts when
+ * given. An order that is not a permutation of the items leaves every item where
+ * it is.
+ */
+export function getReorderOffsets(
+    rects: readonly ReorderBounds[],
+    order: readonly number[],
+    options: ReorderOffsetsOptions = {},
+): number[] {
+    const offsets = rects.map(() => 0)
+
+    if (rects.length === 0 || !isPermutation(order, rects.length)) {
+        return offsets
+    }
+
+    const [start, end] = options.axis === 'x' ? (['left', 'right'] as const) : (['top', 'bottom'] as const)
+    const [leading, trailing] = options.reverse ? [end, start] : [start, end]
+    const direction = options.reverse ? -1 : 1
+    // Each offset is where the new order packs the item minus where its old slot
+    // packs it, from the same origin, so an item measured away from its slot, such
+    // as a sticky cell, doesn't shift the others.
+    let original = 0
+    let target = 0
+
+    for (const [slot, index] of order.entries()) {
+        const rect = rects[slot]!
+        const next = rects[slot + 1]
+        // The gap after this slot, signed along the direction the items run.
+        const signedGap = next
+            ? options.gap === undefined
+                ? next[leading] - rect[trailing]
+                : direction * options.gap
+            : 0
+
+        offsets[index] += target
+        offsets[slot]! -= original
+        target += direction * (rects[index]![end] - rects[index]![start]) + signedGap
+        original += direction * (rect[end] - rect[start]) + signedGap
+    }
+
+    return offsets
 }
 
 /**
@@ -369,10 +488,10 @@ function canOverflow(value: string): boolean {
     return value === 'auto' || value === 'scroll' || value === 'overlay'
 }
 
-function isScrollableElement(element: Element): boolean {
+function isScrollableElement(element: Element, axis: AutoScrollAxis): boolean {
     const style = getComputedStyle(element)
-    const canScrollY = canOverflow(style.overflowY) && element.scrollHeight > element.clientHeight
-    const canScrollX = canOverflow(style.overflowX) && element.scrollWidth > element.clientWidth
+    const canScrollY = axis !== 'x' && canOverflow(style.overflowY) && element.scrollHeight > element.clientHeight
+    const canScrollX = axis !== 'y' && canOverflow(style.overflowX) && element.scrollWidth > element.clientWidth
 
     return canScrollY || canScrollX
 }
@@ -389,7 +508,12 @@ function isWindowContainer(container: AutoScrollContainer): container is Window 
     return typeof Window !== 'undefined' && container instanceof Window
 }
 
-function getScrollableAncestors(element: Element | null): AutoScrollContainer[] {
+/**
+ * Ancestors of `element` that can scroll, nearest first, followed by its window.
+ * Pass an axis to keep only the ancestors that scroll along it. Shadow roots are
+ * crossed through their hosts.
+ */
+export function getScrollableAncestors(element: Element | null, axis: AutoScrollAxis = 'both'): AutoScrollContainer[] {
     const containers: AutoScrollContainer[] = []
     const ownerWindow = getOwnerWindow(element)
     let node: Node | null = element
@@ -397,7 +521,7 @@ function getScrollableAncestors(element: Element | null): AutoScrollContainer[] 
     while (node) {
         node = getParentNodeAcrossShadowDom(node)
 
-        if (node instanceof Element && isScrollableElement(node)) {
+        if (node instanceof Element && isScrollableElement(node, axis)) {
             containers.push(node)
         }
     }
@@ -456,9 +580,25 @@ function getMaxScrollPosition(container: AutoScrollContainer, axis: 'x' | 'y'): 
     )
 }
 
-function canScroll(container: AutoScrollContainer, axis: 'x' | 'y', direction: number): boolean {
+function scrollsRightToLeft(container: AutoScrollContainer): boolean {
+    const element = isWindowContainer(container) ? getScrollElement(container) : container
+
+    return element !== null && getComputedStyle(element).direction === 'rtl'
+}
+
+function canScroll(
+    container: AutoScrollContainer,
+    axis: 'x' | 'y',
+    direction: number,
+    isRightToLeft: (container: AutoScrollContainer) => boolean,
+): boolean {
     const position = getScrollPosition(container, axis)
     const maxPosition = getMaxScrollPosition(container, axis)
+
+    // Right-to-left boxes start at 0 on the right and scroll left into negative positions.
+    if (axis === 'x' && isRightToLeft(container)) {
+        return direction < 0 ? position > -maxPosition : position < 0
+    }
 
     return direction < 0 ? position > 0 : position < maxPosition
 }
@@ -481,6 +621,7 @@ function getAutoScrollVector(
     point: ReorderPoint,
     edgeThreshold: number,
     maxStep: number,
+    isRightToLeft: (container: AutoScrollContainer) => boolean,
 ): { left: number; top: number } {
     const rect = getContainerRect(container)
     const width = rect.right - rect.left
@@ -489,8 +630,8 @@ function getAutoScrollVector(
     const yThreshold = Math.min(edgeThreshold, Math.max(0, height / 2))
     const xIntensity = edgeIntensity(point.clientX, rect.left, rect.right, xThreshold)
     const yIntensity = edgeIntensity(point.clientY, rect.top, rect.bottom, yThreshold)
-    const left = xIntensity !== 0 && canScroll(container, 'x', xIntensity) ? xIntensity * maxStep : 0
-    const top = yIntensity !== 0 && canScroll(container, 'y', yIntensity) ? yIntensity * maxStep : 0
+    const left = xIntensity !== 0 && canScroll(container, 'x', xIntensity, isRightToLeft) ? xIntensity * maxStep : 0
+    const top = yIntensity !== 0 && canScroll(container, 'y', yIntensity, isRightToLeft) ? yIntensity * maxStep : 0
 
     return { left, top }
 }
@@ -531,6 +672,8 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
     let frameId: number | null = null
     let lastTimestamp: number | null = null
     let cleaned = false
+    // Writing direction of each container, read once per gesture when it first scrolls sideways.
+    const rightToLeft = new Map<AutoScrollContainer, boolean>()
 
     function queueFrame() {
         if (cleaned || frameId !== null || typeof requestAnimationFrame !== 'function') {
@@ -538,6 +681,17 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         }
 
         frameId = requestAnimationFrame(step)
+    }
+
+    function readsRightToLeft(container: AutoScrollContainer): boolean {
+        let value = rightToLeft.get(container)
+
+        if (value === undefined) {
+            value = scrollsRightToLeft(container)
+            rightToLeft.set(container, value)
+        }
+
+        return value
     }
 
     function stop() {
@@ -550,6 +704,7 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         containers = []
         frameId = null
         lastTimestamp = null
+        rightToLeft.clear()
     }
 
     function step(timestamp: number) {
@@ -568,7 +723,7 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         lastTimestamp = timestamp
 
         for (const container of containers) {
-            const vector = getAutoScrollVector(container, latestPoint, edgeThreshold, maxStep)
+            const vector = getAutoScrollVector(container, latestPoint, edgeThreshold, maxStep, readsRightToLeft)
             const left = handledX ? 0 : vector.left
             const top = handledY ? 0 : vector.top
 
@@ -632,6 +787,8 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
 interface PointerReorderOptions {
     /** Capture drag geometry only after the initiating pointer has been accepted. */
     onStart: () => void
+    /** Whether rows read from right to left, as decided when the drag started. */
+    isRightToLeft?: () => boolean
     /**
      * Return the current hit boxes for every reorderable item. Called on each
      * pointer move and auto-scroll frame so callers can measure fresh
@@ -650,6 +807,8 @@ interface PointerReorderOptions {
     activationDistance?: number
     /** Ignore the click that follows a drag. Defaults to false. */
     suppressClickAfterDrag?: boolean
+    /** Point that picks the drop slot instead of the pointer. Defaults to the pointer. */
+    getCollisionPoint?: (pointer: ReorderPointer, item: ReorderBounds) => ReorderPoint | null
     /** Called whenever the dragged/target/insertion indices change (drag start, move, end). */
     onChange?: (state: PointerReorderState) => void
     /** Called once on pointer up with a resolved, in-range move. */
@@ -714,6 +873,7 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
     let listElement: HTMLElement | null = null
     let pointerState: ReorderableListState = idleState
     let dragHitBoxes: ReorderHitBox[] | null = null
+    let dragRightToLeft = false
     let lastPreviewedPointerTargetIndex: number | null = null
     const itemElements = new Map<number, HTMLElement>()
 
@@ -782,7 +942,11 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
     const pointerReorder = createPointerReorder({
         onStart: () => {
             dragHitBoxes = measureItemHitBoxes()
+            // Rows follow the list's writing direction, read once per drag.
+            const element = listElement ?? itemElements.values().next().value
+            dragRightToLeft = !!element && getComputedStyle(element).direction === 'rtl'
         },
+        isRightToLeft: () => dragRightToLeft,
         getItemCount: itemCount,
         getHitBoxes,
         getBounds,
@@ -790,6 +954,7 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
         autoScroll: options.autoScroll ?? false,
         activationDistance: options.activationDistance,
         suppressClickAfterDrag: options.suppressClickAfterDrag,
+        getCollisionPoint: options.getCollisionPoint,
         onChange: (state) => {
             if (state.draggedIndex !== null) {
                 lastPreviewedPointerTargetIndex = state.targetIndex
@@ -927,22 +1092,46 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function updateInsertionIndex(point: ReorderPoint) {
+        const hitBoxes = options.getHitBoxes()
         const nextInsertionIndex = getInsertionIndexFromPoint(
-            options.getHitBoxes(),
+            hitBoxes,
             {
                 clientX: point.clientX,
                 clientY: point.clientY,
             },
             {
                 bounds: options.getBounds?.() ?? null,
+                rightToLeft: options.isRightToLeft?.(),
             },
         )
 
+        // The pointer decides whether a release drops or cancels, even when another point picks the slot.
         pointerOverReorderArea = nextInsertionIndex !== null
 
         if (nextInsertionIndex !== null) {
-            insertionIndex = nextInsertionIndex
+            insertionIndex = getCollisionInsertionIndex(hitBoxes) ?? nextInsertionIndex
         }
+    }
+
+    /** The insertion index at the caller's collision point, or null to use the pointer. */
+    function getCollisionInsertionIndex(hitBoxes: readonly ReorderHitBox[]): number | null {
+        const getCollisionPoint = options.getCollisionPoint
+
+        if (!getCollisionPoint || !activePointer || !pointer) {
+            return null
+        }
+
+        const fromIndex = activePointer.fromIndex
+        const item = hitBoxes.find((hitBox) => hitBox.index === fromIndex)
+        const point = item ? getCollisionPoint(pointer, item) : null
+
+        if (!point || !Number.isFinite(point.clientX) || !Number.isFinite(point.clientY)) {
+            return null
+        }
+
+        return getInsertionIndexFromPoint(hitBoxes, clampToHitBoxes(hitBoxes, point), {
+            rightToLeft: options.isRightToLeft?.(),
+        })
     }
 
     function updatePointerPosition(event: PointerEvent, shouldAutoScroll: boolean) {

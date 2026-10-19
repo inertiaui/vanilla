@@ -6,7 +6,8 @@ import {
     type NativePopoverDisclosureController,
     type NativePopoverDisclosureOptions,
 } from './nativePopover'
-import type { Placement, TopLayerPopoverPositionOptions } from './position'
+import type { TopLayerPopoverPositionOptions } from './position'
+import { followReferenceDirection } from './rtl'
 
 export interface PopoverMountContext {
     reference: HTMLElement
@@ -52,15 +53,8 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
         reference: options.reference,
         popover: options.popover,
         get position() {
-            let placement = options.position.placement ?? 'bottom-start'
-            const reference = options.reference()
-            if (reference && getComputedStyle(reference).direction === 'rtl' && /^(top|bottom)-/.test(placement)) {
-                placement = placement.replace(/start|end/, (side) => (side === 'start' ? 'end' : 'start')) as Placement
-            }
-
             return {
                 ...options.position,
-                placement,
                 anchorPositioning: native && options.position.anchorPositioning !== false,
             }
         },
@@ -153,6 +147,9 @@ export function createPopoverController(options: PopoverControllerOptions): Popo
             panel.removeEventListener('keydown', onKeydown)
             panel.removeEventListener('focusout', activeDisclosure.handleFocusOut)
         })
+
+        // A panel rendered away from its reference, such as in the body, still reads in the reference's direction.
+        cleanups.push(followReferenceDirection(reference, panel))
 
         if (native) {
             activeDisclosure.showPopover()

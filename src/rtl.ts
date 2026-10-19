@@ -23,3 +23,24 @@ export function onRtlChange(callback: (rtl: boolean) => void): CleanupFunction {
 
     return () => observer.disconnect()
 }
+
+/**
+ * Give a panel rendered away from its reference, such as in the body, the
+ * direction the reference is written in. A panel with its own `dir` keeps it.
+ * Returns a cleanup function that removes the direction again.
+ */
+export function followReferenceDirection(reference: Element, panel: HTMLElement): CleanupFunction {
+    const direction = getComputedStyle(reference).direction
+
+    if (panel.hasAttribute('dir') || getComputedStyle(panel).direction === direction) {
+        return () => {}
+    }
+
+    panel.setAttribute('dir', direction)
+
+    return () => {
+        if (panel.getAttribute('dir') === direction) {
+            panel.removeAttribute('dir')
+        }
+    }
+}

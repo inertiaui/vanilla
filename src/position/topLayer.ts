@@ -11,6 +11,7 @@ import {
 import {
     clampTopLayerCoordinates,
     computePositionFromRect,
+    isRightToLeft,
     getAvailableSpace,
     getViewportRect,
     referenceIntersectsViewport,
@@ -241,7 +242,13 @@ export function positionTopLayerPopover(
     }
 
     const floatingRect = floating.getBoundingClientRect()
-    const coordinates = computePositionFromRect(referenceRect, floatingRect, resolvedPlacement, offset)
+    const coordinates = computePositionFromRect(
+        referenceRect,
+        floatingRect,
+        resolvedPlacement,
+        offset,
+        isRightToLeft(reference),
+    )
     const { x, y } = clampTopLayerCoordinates(
         coordinates.x,
         coordinates.y,

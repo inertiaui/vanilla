@@ -1,4 +1,5 @@
 import { generateId } from '../helpers'
+import { isRightToLeft } from './geometry'
 import { removeStyleProperty, setStyleProperty } from './style'
 import type { Placement } from './types'
 
@@ -111,7 +112,7 @@ export function setupAnchorPositioning(
     const sheet = ensureAnchorStylesheet()
     const className = id
 
-    const positionRules = getAnchorPositionRules(placement, offset)
+    const positionRules = getAnchorPositionRules(placement, offset, isRightToLeft(reference))
     let tryFallback = ''
 
     if (flip) {
@@ -149,7 +150,7 @@ export function detachAnchorPositioning(reference: HTMLElement, floating: HTMLEl
     }
 }
 
-function getAnchorPositionRules(placement: Placement, offset: number): string {
+function getAnchorPositionRules(placement: Placement, offset: number, rtl: boolean): string {
     const [side, alignment] = placement.split('-') as [string, string | undefined]
     let positionRules = ''
 
@@ -174,11 +175,12 @@ function getAnchorPositionRules(placement: Placement, offset: number): string {
 
     if (side === 'bottom' || side === 'top') {
         switch (alignment) {
+            // Start and end follow the reference's writing direction.
             case 'start':
-                positionRules += `left: anchor(left);`
+                positionRules += rtl ? `right: anchor(right);` : `left: anchor(left);`
                 break
             case 'end':
-                positionRules += `right: anchor(right);`
+                positionRules += rtl ? `left: anchor(left);` : `right: anchor(right);`
                 break
             default:
                 positionRules += `left: anchor(center); translate: -50% 0;`
@@ -260,7 +262,7 @@ export function setupTopLayerAnchorPositioning(
         setStyleProperty(floating.style, 'width', `min(anchor-size(width), ${maxWidth}px)`)
     }
 
-    const positionRules = getAnchorPositionRules(placement, offset)
+    const positionRules = getAnchorPositionRules(placement, offset, isRightToLeft(reference))
     const tryFallbackRules = flip
         ? 'position-try-fallbacks: flip-block, flip-inline; position-try: flip-block, flip-inline;'
         : ''

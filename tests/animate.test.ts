@@ -1,6 +1,7 @@
 import {
     animateFromSnapshot,
     captureAnimationSnapshot,
+    createLayoutAnimation,
     prefersReducedMotion,
     type AnimationSnapshot,
 } from '../src/animate'
@@ -238,5 +239,275 @@ describe('animation snapshots', () => {
         animateFromSnapshot(snapshot, elements)
         expect(animations).toHaveLength(elements.length)
         expect(roots.mock.calls.length).toBeLessThan(elements.length)
+    })
+})
+
+describe('createLayoutAnimation', () => {
+    const originalAnimate = Element.prototype.animate
+    const originalMatchMedia = window.matchMedia
+    let reducedMotion = false
+    let animations: Array<Animation & { cancel: ReturnType<typeof vi.fn>; finish: () => void }> = []
+
+    beforeEach(() => {
+        document.body.innerHTML = ''
+        reducedMotion = false
+        animations = []
+        Object.defineProperty(Element.prototype, 'animate', {
+            configurable: true,
+            value: vi.fn(() => {
+                let settle: (animation: Animation) => void = () => {}
+                let fail: (error: Error) => void = () => {}
+                const animation = {
+                    finished: new Promise<Animation>((resolve, reject) => {
+                        settle = resolve
+                        fail = reject
+                    }),
+                } as Animation & { cancel: ReturnType<typeof vi.fn>; finish: () => void }
+                animation.cancel = vi.fn(() => fail(new Error('canceled')))
+                animation.finish = () => settle(animation)
+                animations.push(animation)
+
+                return animation
+            }),
+        })
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: vi.fn(() => ({ matches: reducedMotion })),
+        })
+    })
+
+    afterEach(() => {
+        if (originalAnimate) {
+            Object.defineProperty(Element.prototype, 'animate', { configurable: true, value: originalAnimate })
+        } else {
+            delete (Element.prototype as { animate?: Element['animate'] }).animate
+        }
+        Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia })
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    // A plain list whose second item moves down by 30px between the snapshot and the next render.
+    const list = () => {
+        const items = [appendElement(), appendElement()]
+        setRect(items[0], rect(0, 0))
+        setRect(items[1], rect(0, 30))
+        const snapshot = captureAnimationSnapshot(items)
+        setRect(items[1], rect(0, 60))
+
+        return { items, snapshot }
+    }
+
+    const scheduler = () => {
+        const runs: Array<() => void> = []
+        const cancels: Array<ReturnType<typeof vi.fn>> = []
+        const schedule = vi.fn((run: () => void) => {
+            runs.push(run)
+            const cancel = vi.fn()
+            cancels.push(cancel)
+
+            return cancel
+        })
+
+        return { schedule, runs, cancels }
+    }
+
+    const settled = () => new Promise((resolve) => setTimeout(resolve))
+
+    it('animates the elements read once the renderer has updated, then reports the start and the settle', async () => {
+        const { items, snapshot } = list()
+        const { schedule, runs } = scheduler()
+        const calls: string[] = []
+        const getElements = vi.fn(() => (calls.push('elements'), items))
+        const controller = createLayoutAnimation({ schedule, duration: 100 })
+
+        controller.animate(snapshot, getElements, {
+            onStart: (started) => calls.push(`start:${started.length}`),
+            onSettle: () => calls.push('settle'),
+        })
+        expect(getElements).not.toHaveBeenCalled()
+        expect(Element.prototype.animate).not.toHaveBeenCalled()
+
+        runs[0]()
+        expect(calls).toEqual(['elements', 'start:1'])
+        expect(Element.prototype.animate).toHaveBeenCalledWith(
+            [{ transform: 'translate3d(0px, -30px, 0)' }, { transform: 'translate3d(0, 0, 0)' }],
+            expect.objectContaining({ duration: 100 }),
+        )
+
+        await settled()
+        expect(calls).toEqual(['elements', 'start:1'])
+        animations[0].finish()
+        await settled()
+        expect(calls).toEqual(['elements', 'start:1', 'settle'])
+    })
+
+    it('waits for the next animation frame by default', () => {
+        const { items, snapshot } = list()
+        const frames: FrameRequestCallback[] = []
+        vi.stubGlobal(
+            'requestAnimationFrame',
+            vi.fn((callback: FrameRequestCallback) => frames.push(callback)),
+        )
+        const onStart = vi.fn()
+
+        createLayoutAnimation().animate(snapshot, () => items, { onStart })
+        expect(onStart).not.toHaveBeenCalled()
+        frames[0](0)
+        expect(onStart).toHaveBeenCalledWith([animations[0]])
+    })
+
+    it('drops runs that have not started and cancels running animations, which still settle', async () => {
+        const { items, snapshot } = list()
+        const { schedule, runs, cancels } = scheduler()
+        const onStart = vi.fn()
+        const onSettle = vi.fn()
+        const controller = createLayoutAnimation({ schedule })
+
+        controller.animate(snapshot, () => items, { onStart, onSettle })
+        controller.cancel()
+        expect(cancels[0]).toHaveBeenCalledOnce()
+        await settled()
+        expect(onStart).not.toHaveBeenCalled()
+        expect(onSettle).not.toHaveBeenCalled()
+
+        controller.animate(snapshot, () => items, { onStart, onSettle })
+        runs[1]()
+        controller.cancel()
+        expect(animations[0].cancel).toHaveBeenCalled()
+        await settled()
+        expect(onStart).toHaveBeenCalledOnce()
+        expect(onSettle).toHaveBeenCalledOnce()
+    })
+
+    it('settles a run whose animations a later run takes over', async () => {
+        const { items, snapshot } = list()
+        const { schedule, runs } = scheduler()
+        const first = vi.fn()
+        const second = vi.fn()
+        const controller = createLayoutAnimation({ schedule })
+
+        controller.animate(snapshot, () => items, { onSettle: first })
+        runs[0]()
+        controller.animate(captureAnimationSnapshot(items), () => items, { onSettle: second })
+        setRect(items[1], rect(0, 90))
+        runs[1]()
+        await settled()
+        expect(first).toHaveBeenCalledOnce()
+        expect(second).not.toHaveBeenCalled()
+    })
+
+    it('settles at once without motion', async () => {
+        reducedMotion = true
+        const { items, snapshot } = list()
+        const { schedule, runs } = scheduler()
+        const onStart = vi.fn()
+        const onSettle = vi.fn()
+
+        createLayoutAnimation({ schedule }).animate(snapshot, () => items, { onStart, onSettle })
+        runs[0]()
+        expect(onStart).toHaveBeenCalledWith([])
+        await settled()
+        expect(onSettle).toHaveBeenCalledOnce()
+        expect(Element.prototype.animate).not.toHaveBeenCalled()
+    })
+
+    it('stops everything silently on cleanup and ignores later runs', async () => {
+        const { items, snapshot } = list()
+        const { schedule, runs, cancels } = scheduler()
+        const onStart = vi.fn()
+        const onSettle = vi.fn()
+        const controller = createLayoutAnimation({ schedule })
+
+        controller.animate(snapshot, () => items, { onStart, onSettle })
+        runs[0]()
+        controller.animate(snapshot, () => items, { onStart, onSettle })
+        controller.cleanup()
+        expect(animations[0].cancel).toHaveBeenCalled()
+        expect(cancels[1]).toHaveBeenCalledOnce()
+        controller.animate(snapshot, () => items, { onStart, onSettle })
+        runs[1]?.()
+        await settled()
+        expect(schedule).toHaveBeenCalledTimes(2)
+        expect(onStart).toHaveBeenCalledOnce()
+        expect(onSettle).not.toHaveBeenCalled()
+    })
+
+    it('cancels a frame whose handle is 0', () => {
+        const cancelAnimationFrame = vi.fn()
+        vi.stubGlobal(
+            'requestAnimationFrame',
+            vi.fn(() => 0),
+        )
+        vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame)
+        const { items, snapshot } = list()
+        const controller = createLayoutAnimation()
+
+        controller.animate(snapshot, () => items)
+        controller.cancel()
+        expect(cancelAnimationFrame).toHaveBeenCalledWith(0)
+    })
+
+    it('runs with a synchronous scheduler and one that cannot cancel', async () => {
+        const { items, snapshot } = list()
+        const onSettle = vi.fn()
+        createLayoutAnimation({ schedule: (run) => run() }).animate(snapshot, () => items, { onSettle })
+        expect(animations).toHaveLength(1)
+
+        // A run the scheduler starts after a cancel stays dropped.
+        const later: Array<() => void> = []
+        const controller = createLayoutAnimation({ schedule: (run) => void later.push(run) })
+        const onStart = vi.fn()
+        controller.animate(snapshot, () => items, { onStart })
+        controller.cancel()
+        later[0]()
+        expect(onStart).not.toHaveBeenCalled()
+        animations[0].finish()
+        await settled()
+        expect(onSettle).toHaveBeenCalledOnce()
+    })
+
+    it('stays consistent when callbacks start or cancel runs and when reading elements throws', async () => {
+        const { items, snapshot } = list()
+        const { schedule, runs } = scheduler()
+        const controller = createLayoutAnimation({ schedule })
+        const onSettle = vi.fn(() => controller.cancel())
+
+        controller.animate(snapshot, () => items, {
+            onStart: () => controller.animate(snapshot, () => items, { onSettle }),
+        })
+        runs[0]()
+        expect(schedule).toHaveBeenCalledTimes(2)
+        runs[1]()
+        animations[1].finish()
+        await settled()
+        expect(onSettle).toHaveBeenCalledOnce()
+
+        controller.animate(snapshot, () => {
+            throw new Error('unmounted')
+        })
+        expect(() => runs[2]()).toThrow('unmounted')
+        const onStart = vi.fn()
+        controller.animate(snapshot, () => items, { onStart })
+        runs[3]()
+        expect(onStart).toHaveBeenCalledOnce()
+    })
+
+    it('releases a run whose scheduler throws', () => {
+        const { items, snapshot } = list()
+        const kept: Array<() => void> = []
+        const onStart = vi.fn()
+        const controller = createLayoutAnimation({
+            schedule: (run) => {
+                kept.push(run)
+                throw new Error('no frames')
+            },
+        })
+
+        expect(() => controller.animate(snapshot, () => items, { onStart })).toThrow('no frames')
+        kept[0]()
+        controller.cancel()
+        expect(onStart).not.toHaveBeenCalled()
+        expect(Element.prototype.animate).not.toHaveBeenCalled()
     })
 })

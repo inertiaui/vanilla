@@ -1,4 +1,9 @@
-import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '../src/reorder'
+import {
+    createReorderableList,
+    REORDERABLE_LIST_HANDLE_ATTRIBUTE,
+    type ReorderBounds,
+    type ReorderPointer,
+} from '../src/reorder'
 
 function makeEvent(
     type: string,
@@ -442,6 +447,67 @@ describe('createReorderableList', () => {
         container.remove()
     })
 
+    it('auto-scrolls right-to-left containers both ways', () => {
+        let frame: FrameRequestCallback | null = null
+        let scrollLeft = 0
+        const container = document.createElement('div')
+        const handle = document.createElement('button')
+        const controller = createReorderableList({
+            getItems: () => ['alpha', 'beta'],
+            autoScroll: { axis: 'x', getScrollContainers: () => [container] },
+        })
+
+        // Right-to-left content starts scrolled to the right edge at 0 and scrolls left into negative positions.
+        container.style.direction = 'rtl'
+        Object.defineProperties(container, {
+            clientWidth: { value: 100, configurable: true },
+            scrollWidth: { value: 300, configurable: true },
+            clientHeight: { value: 100, configurable: true },
+            scrollHeight: { value: 100, configurable: true },
+            scrollLeft: {
+                configurable: true,
+                get: () => scrollLeft,
+                set: (value: number) => (scrollLeft = Math.min(0, Math.max(-200, value))),
+            },
+        })
+        container.getBoundingClientRect = () => rect(0, 0, 100, 100)
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        container.append(handle)
+        document.body.append(container)
+        for (const index of [0, 1]) {
+            const cell = document.createElement('div')
+            cell.getBoundingClientRect = () => rect(50 - index * 50, 0, 100 - index * 50, 100)
+            container.append(cell)
+            controller.setItemElement(index, cell)
+        }
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+            frame = callback
+
+            return 1
+        })
+        vi.stubGlobal('cancelAnimationFrame', () => {
+            frame = null
+        })
+
+        try {
+            controller.pointerDown(
+                0,
+                makeEvent('pointerdown', [handle, container, document.body, document, window], container),
+            )
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 2, clientY: 50 }))
+            frame?.(16)
+            expect(scrollLeft).toBeLessThan(0)
+
+            scrollLeft = -200
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 98, clientY: 50 }))
+            frame?.(32)
+            expect(scrollLeft).toBeGreaterThan(-200)
+        } finally {
+            controller.cleanup()
+            container.remove()
+        }
+    })
+
     it.each([
         { name: 'first grid column', x: 20, y: 20, expected: 0 },
         { name: 'second grid column', x: 45, y: 20, expected: 1 },
@@ -476,6 +542,54 @@ describe('createReorderableList', () => {
             })
         } finally {
             controller.cleanup()
+        }
+    })
+
+    it.each([
+        {
+            name: 'in index order',
+            rects: [rect(100, 0, 140, 40), rect(50, 0, 90, 40), rect(0, 0, 40, 40)],
+            moves: [
+                [130, 0, 0],
+                [110, 1, 0],
+                [60, 2, 1],
+                [10, 3, 2],
+            ],
+        },
+        {
+            name: 'out of index order',
+            rects: [rect(50, 0, 90, 40), rect(100, 0, 140, 40), rect(0, 0, 40, 40)],
+            moves: [
+                [130, 1, 0],
+                [110, 0, 0],
+                [60, 2, 1],
+                [10, 3, 2],
+            ],
+        },
+    ])('reads a right-to-left row in visual order from the right, $name', ({ rects, moves }) => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        const list = document.createElement('div')
+        list.style.direction = 'rtl'
+        list.getBoundingClientRect = () => rect(0, 0, 140, 40)
+        document.body.append(list)
+        const onChange = vi.fn()
+        const controller = createReorderableList({ getItems: () => [0, 1, 2], onChange })
+        controller.setListElement(list)
+        rects.forEach((value, index) => {
+            const element = document.createElement('div')
+            element.getBoundingClientRect = () => value
+            controller.setItemElement(index, element)
+        })
+        try {
+            controller.pointerDown(0, makeEvent('pointerdown', [handle], handle, { clientX: 130, clientY: 20 }))
+            for (const [clientX, insertionIndex, targetIndex] of moves) {
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX, clientY: 20 }))
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex, targetIndex })
+            }
+        } finally {
+            controller.cleanup()
+            list.remove()
         }
     })
 
@@ -852,6 +966,145 @@ describe('createReorderableList', () => {
                     origin: { clientX: 50, clientY: 20 },
                     position: { clientX: 50, clientY: 20 },
                 })
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+    })
+
+    describe('collision point', () => {
+        // A row with a wide middle item between two narrow ones: 0 [0, 100], 1 [100, 400], 2 [400, 500].
+        const boxes = [rect(0, 0, 100, 40), rect(100, 0, 400, 40), rect(400, 0, 500, 40)]
+        const leadingEdge = ({ origin, position }: ReorderPointer, item: ReorderBounds) => {
+            const offset = position.clientX - origin.clientX
+
+            return { clientX: (offset > 0 ? item.right : item.left) + offset, clientY: position.clientY }
+        }
+
+        function setup(options: Partial<Parameters<typeof createReorderableList<number>>[0]> = {}) {
+            const handle = document.createElement('button')
+            handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            handle.setPointerCapture = vi.fn()
+            document.body.append(handle)
+            let items = [0, 1, 2]
+            const onChange = vi.fn()
+            const onReorder = vi.fn()
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getBounds: () => rect(0, 0, 500, 40),
+                activationDistance: 4,
+                onChange,
+                onReorder,
+                ...options,
+            })
+            boxes.forEach((box, index) => {
+                const element = document.createElement('div')
+                element.getBoundingClientRect = () => box
+                controller.setItemElement(index, element)
+            })
+            // Grab the wide item near its start.
+            const press = () =>
+                controller.pointerDown(
+                    1,
+                    makeEvent('pointerdown', [handle, document.body, document, window], handle, {
+                        clientX: 120,
+                        clientY: 20,
+                    }),
+                )
+            const move = (clientX: number, clientY = 20) =>
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX, clientY }))
+            const release = (clientX: number, clientY = 20) =>
+                window.dispatchEvent(makeEvent('pointerup', [window], window, { clientX, clientY }))
+
+            return { handle, controller, onChange, onReorder, press, move, release, items: () => items }
+        }
+
+        it('picks the slot from the pointer by default and when the point is null', () => {
+            for (const getCollisionPoint of [undefined, () => null]) {
+                const { handle, controller, onReorder, press, move, release } = setup({ getCollisionPoint })
+                try {
+                    // The wide item now covers its narrow neighbor, but the pointer is short of that neighbor's midpoint.
+                    press()
+                    move(220)
+                    release(220)
+                    expect(onReorder).not.toHaveBeenCalled()
+
+                    press()
+                    move(460)
+                    release(460)
+                    expect(onReorder).toHaveBeenCalledWith(
+                        { item: 1, fromIndex: 1, toIndex: 2, source: 'pointer' },
+                        { alreadyPreviewed: true },
+                    )
+                } finally {
+                    controller.cleanup()
+                    handle.remove()
+                }
+            }
+        })
+
+        it('picks the slot from the given point, including a drop on the activating move', () => {
+            const getCollisionPoint = vi.fn(leadingEdge)
+            const { handle, controller, onChange, press, move, release, items } = setup({ getCollisionPoint })
+            try {
+                press()
+                move(220)
+                expect(getCollisionPoint).toHaveBeenLastCalledWith(
+                    { origin: { clientX: 120, clientY: 20 }, position: { clientX: 220, clientY: 20 } },
+                    expect.objectContaining({ left: 100, top: 0, right: 400, bottom: 40 }),
+                )
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+                release(220)
+                expect(items()).toEqual([0, 2, 1])
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('follows the given point back across the start and toward the other side', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup({
+                getCollisionPoint: leadingEdge,
+            })
+            try {
+                press()
+                move(220)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+                // The leading edge is back short of the next item's midpoint.
+                move(160)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 2, targetIndex: 1 })
+                // The leading edge has crossed the previous item's midpoint.
+                move(60)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 0, targetIndex: 0 })
+                release(60)
+                expect(onReorder).toHaveBeenCalledWith(
+                    { item: 1, fromIndex: 1, toIndex: 0, source: 'pointer' },
+                    { alreadyPreviewed: true },
+                )
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('keeps the point within the items, while the pointer still decides between dropping and canceling', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup({
+                getCollisionPoint: leadingEdge,
+            })
+            try {
+                // The leading edge has passed the end of the list.
+                press()
+                move(380)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+
+                // Leaving the list with the pointer cancels, although the clamped point stays inside.
+                move(380, 120)
+                release(380, 120)
+                expect(onReorder).not.toHaveBeenCalled()
             } finally {
                 controller.cleanup()
                 handle.remove()

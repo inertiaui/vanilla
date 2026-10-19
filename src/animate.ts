@@ -1,3 +1,5 @@
+import type { CleanupFunction } from './dialog'
+
 /**
  * Tailwind CSS easing functions
  */
@@ -236,4 +238,128 @@ export function animateFromSnapshot(
     }
 
     return animations
+}
+
+export interface LayoutAnimationOptions extends AnimateFromSnapshotOptions {
+    /**
+     * Run the callback once the renderer has applied the new layout, and return a
+     * function that cancels it. Defaults to the next animation frame.
+     */
+    schedule?: (run: () => void) => (() => void) | void
+}
+
+export interface LayoutAnimationCallbacks {
+    /** Called with the started animations, in the same task that starts them. */
+    onStart?: (animations: Animation[]) => void
+    /**
+     * Called once every animation of the run has finished or been canceled, by a
+     * later run taking over its elements or by `cancel()`. Use it to undo styles
+     * the move needed. Still runs, shortly after `onStart`, when nothing animates.
+     */
+    onSettle?: () => void
+}
+
+export interface LayoutAnimationController {
+    /** Animate the elements from `snapshot` to their layout once the renderer has updated. */
+    animate: (
+        snapshot: AnimationSnapshot | null,
+        getElements: () => Iterable<HTMLElement | null | undefined>,
+        callbacks?: LayoutAnimationCallbacks,
+    ) => void
+    /** Drop runs that have not started and cancel running animations, which still settle. */
+    cancel: () => void
+    /** Stop everything without calling back, and ignore later runs. Idempotent. */
+    cleanup: CleanupFunction
+}
+
+type ScheduledLayoutAnimation = {
+    /** Set once the run has started or will never start. */
+    dropped: boolean
+    cancel?: (() => void) | void
+}
+
+function nextFrame(run: () => void): (() => void) | void {
+    if (typeof requestAnimationFrame !== 'function') {
+        return run()
+    }
+
+    const frame = requestAnimationFrame(() => run())
+
+    return () => cancelAnimationFrame(frame)
+}
+
+/**
+ * Animate layout changes a renderer makes after a snapshot, keeping track of
+ * scheduled and running moves so they can be interrupted.
+ */
+export function createLayoutAnimation(options: LayoutAnimationOptions = {}): LayoutAnimationController {
+    const { schedule = nextFrame, ...animationOptions } = options
+    const pending = new Set<ScheduledLayoutAnimation>()
+    const running = new Set<Animation>()
+    let cleaned = false
+
+    function animate(
+        snapshot: AnimationSnapshot | null,
+        getElements: () => Iterable<HTMLElement | null | undefined>,
+        callbacks: LayoutAnimationCallbacks = {},
+    ): void {
+        if (cleaned) {
+            return
+        }
+
+        const scheduled: ScheduledLayoutAnimation = { dropped: false }
+        const run = () => {
+            if (scheduled.dropped || cleaned) {
+                return
+            }
+
+            // A run starts once, even when the scheduler calls it again.
+            scheduled.dropped = true
+            pending.delete(scheduled)
+
+            const animations = animateFromSnapshot(snapshot, getElements(), animationOptions)
+
+            animations.forEach((animation) => running.add(animation))
+            void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+                animations.forEach((animation) => running.delete(animation))
+
+                if (!cleaned) {
+                    callbacks.onSettle?.()
+                }
+            })
+            callbacks.onStart?.(animations)
+        }
+
+        pending.add(scheduled)
+
+        try {
+            scheduled.cancel = schedule(run)
+        } catch (error) {
+            // A run the scheduler kept before throwing never starts.
+            scheduled.dropped = true
+            pending.delete(scheduled)
+            throw error
+        }
+    }
+
+    function cancel(): void {
+        for (const scheduled of pending) {
+            scheduled.dropped = true
+            scheduled.cancel?.()
+        }
+
+        pending.clear()
+        Array.from(running).forEach((animation) => animation.cancel())
+    }
+
+    return {
+        animate,
+        cancel,
+        cleanup: () => {
+            if (!cleaned) {
+                cleaned = true
+                cancel()
+            }
+        },
+    }
 }

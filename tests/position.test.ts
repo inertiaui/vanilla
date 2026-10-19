@@ -760,3 +760,38 @@ describe('positionTopLayerPopover', () => {
         expect(disconnect).toHaveBeenCalled()
     })
 })
+
+describe('start and end placements', () => {
+    afterEach(() => {
+        document.body.innerHTML = ''
+        document.documentElement.style.direction = ''
+        vi.resetModules()
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+    })
+
+    it.each([
+        { documentDirection: 'ltr', referenceDirection: 'ltr', start: 300, end: 400 },
+        { documentDirection: 'ltr', referenceDirection: 'rtl', start: 400, end: 300 },
+        { documentDirection: 'rtl', referenceDirection: 'rtl', start: 400, end: 300 },
+        { documentDirection: 'rtl', referenceDirection: 'ltr', start: 300, end: 400 },
+    ])(
+        'aligns to the reference direction when positioning numerically ($documentDirection document, $referenceDirection reference)',
+        async ({ documentDirection, referenceDirection, start, end }) => {
+            vi.stubGlobal('CSS', { supports: vi.fn(() => false) })
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
+            Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
+            document.documentElement.style.direction = documentDirection
+            const { computePosition } = await import('../src/position')
+            const reference = document.createElement('button')
+            const floating = document.createElement('div')
+            reference.style.direction = referenceDirection
+            reference.getBoundingClientRect = () => rect(300, 100, 500, 140)
+            floating.getBoundingClientRect = () => rect(0, 0, 100, 50)
+            document.body.append(reference, floating)
+
+            expect(computePosition(reference, floating, { placement: 'bottom-start' }).x).toBe(start)
+            expect(computePosition(reference, floating, { placement: 'top-end' }).x).toBe(end)
+        },
+    )
+})

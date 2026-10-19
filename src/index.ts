@@ -16,8 +16,17 @@ export {
     supportsWebAnimations,
     captureAnimationSnapshot,
     animateFromSnapshot,
+    createLayoutAnimation,
 } from './animate'
-export type { EasingName, AnimateOptions, AnimationSnapshot, AnimateFromSnapshotOptions } from './animate'
+export type {
+    EasingName,
+    AnimateOptions,
+    AnimationSnapshot,
+    AnimateFromSnapshotOptions,
+    LayoutAnimationCallbacks,
+    LayoutAnimationController,
+    LayoutAnimationOptions,
+} from './animate'
 
 export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden, markInert } from './dialog'
 export type { CleanupFunction, FocusTrapOptions, EscapeKeyOptions } from './dialog'
@@ -35,7 +44,12 @@ export type {
     ListboxNavigationResult,
 } from './listbox'
 
-export { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from './reorder'
+export {
+    createReorderableList,
+    getReorderOffsets,
+    getScrollableAncestors,
+    REORDERABLE_LIST_HANDLE_ATTRIBUTE,
+} from './reorder'
 export type {
     AutoScrollAxis,
     AutoScrollContainer,
@@ -44,6 +58,7 @@ export type {
     ReorderCommitContext,
     ReorderDirection,
     ReorderMove,
+    ReorderOffsetsOptions,
     ReorderPoint,
     ReorderPointer,
     ReorderPreviewItem,
@@ -103,6 +118,9 @@ export {
     formatColor,
 } from './color'
 export type { HslColor, ColorFormat, RgbColor, ParsedColor, FormatColorOptions } from './color'
+
+export { captureInlineStyles } from './style'
+export type { InlineStyleSnapshot } from './style'
 
 export { inheritCssVariables } from './cssVariables'
 export type { CssVariableInheritanceOptions } from './cssVariables'
