@@ -8,6 +8,7 @@ import {
     type PositionOptions,
     type TopLayerPopoverPositionOptions,
 } from './position'
+import { followReferenceDirection } from './rtl'
 
 export interface TooltipControllerOptions {
     reference: () => HTMLElement | null
@@ -105,6 +106,7 @@ export function createTooltipController(options: TooltipControllerOptions): Tool
         if (!disclosure?.isOpen || !reference || !tooltip) return
         cleanup()
         mounted = tooltip
+        cleanups.push(followReferenceDirection(reference, tooltip))
         if (native) tooltip.showPopover()
         // Preserve the consumer's CSS width limits while sharing positioning and viewport listeners.
         const updatePosition = () =>

@@ -764,3 +764,68 @@ test.describe('Safari top-layer popover positioning', () => {
         expect(styles.hasAnchorClass).toBe(false)
     })
 })
+
+for (const path of ['computePosition', 'top layer with anchors', 'top layer without anchors'] as const) {
+    test(`aligns start and end to the reference's writing direction (${path})`, async ({ page }) => {
+        const results = await page.evaluate(async (path) => {
+            const modulePath = '/src/index.ts'
+            const { computePosition, positionTopLayerPopover } = await import(modulePath)
+            const results: Record<string, string> = {}
+
+            for (const [documentDir, referenceDir] of [
+                ['ltr', 'ltr'],
+                ['ltr', 'rtl'],
+                ['rtl', 'rtl'],
+                ['rtl', 'ltr'],
+            ]) {
+                for (const placement of ['bottom-start', 'bottom-end'] as const) {
+                    document.documentElement.dir = documentDir
+                    const wrapper = document.createElement('div')
+                    const reference = document.createElement('button')
+                    const floating = document.createElement('div')
+                    wrapper.dir = referenceDir
+                    reference.style.cssText = 'position:fixed;left:300px;top:100px;width:200px;height:30px'
+                    floating.style.cssText = 'width:80px;height:40px;margin:0;padding:0;border:0'
+                    wrapper.append(reference)
+                    document.body.append(wrapper, floating)
+
+                    if (path === 'computePosition') {
+                        computePosition(reference, floating, { placement })
+                    } else {
+                        floating.setAttribute('popover', 'manual')
+                        floating.showPopover()
+                        positionTopLayerPopover(reference, floating, {
+                            placement,
+                            anchorPositioning: path === 'top layer with anchors',
+                        })
+                    }
+
+                    const panel = floating.getBoundingClientRect()
+                    const anchor = reference.getBoundingClientRect()
+                    results[`${documentDir} ${referenceDir} ${placement}`] =
+                        Math.abs(panel.left - anchor.left) < 1
+                            ? 'left'
+                            : Math.abs(panel.right - anchor.right) < 1
+                              ? 'right'
+                              : `${panel.left}`
+                    wrapper.remove()
+                    floating.remove()
+                }
+            }
+            document.documentElement.dir = ''
+
+            return results
+        }, path)
+
+        expect(results).toEqual({
+            'ltr ltr bottom-start': 'left',
+            'ltr ltr bottom-end': 'right',
+            'ltr rtl bottom-start': 'right',
+            'ltr rtl bottom-end': 'left',
+            'rtl rtl bottom-start': 'right',
+            'rtl rtl bottom-end': 'left',
+            'rtl ltr bottom-start': 'left',
+            'rtl ltr bottom-end': 'right',
+        })
+    })
+}

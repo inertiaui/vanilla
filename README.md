@@ -28,6 +28,7 @@ npm install @inertiaui/vanilla
 - [Native Popovers](#native-popovers)
 - [Tooltip Controllers](#tooltip-controllers)
 - [Dialog Controllers](#dialog-controllers)
+- [Inline Styles](#inline-styles)
 - [CSS Variable Inheritance](#css-variable-inheritance)
 - [Accessibility](#accessibility)
 - [Animation](#animation)
@@ -460,6 +461,55 @@ moveUpButton.addEventListener('click', () => controller.moveItem(index, 'up'))
 
 Use `getPreviewOrder()` or `getPreviewItems()` during pointer dragging when your renderer needs to show the future order before release. The reorder detail includes `alreadyPreviewed`, so consumers can avoid replaying the same release animation when the list already animated into the committed position.
 
+#### Dragging from clickable content
+
+By default a press on a handle starts dragging immediately: the controller prevents the browser's default action, captures the pointer, and reports the drag through `onChange`. When the handle is also a button or a label that should keep working on click, set `activationDistance`. A press then stays an ordinary press until the pointer travels that many CSS pixels, so clicks, focus, and native scrolling behave as usual. Releasing earlier ends the press without notifying `onChange`.
+
+Pair it with `suppressClickAfterDrag` so the click the browser sends after a drag does not activate the control under the pointer. Only that one click is ignored: the next press or key press clears the suppression, so a later click or keyboard activation still works.
+
+```typescript
+const controller = createReorderableList({
+    getItems: () => columns,
+    setItems: (nextColumns) => (columns = nextColumns),
+    activationDistance: 4,
+    suppressClickAfterDrag: true,
+    onChange: (state) => {
+        const pointer = controller.getPointer()
+
+        if (state.draggedIndex !== null && pointer) {
+            // Keep the dragged item under the pointer.
+            translate(state.draggedIndex, pointer.position.clientX - pointer.origin.clientX)
+        }
+    },
+})
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') controller.cancel()
+})
+```
+
+`getPointer()` returns the press origin and latest position while a drag is active, and `null` otherwise. The object lasts for the whole gesture, and its `position` is replaced on every move, so read it during `onChange` and copy any values you need to keep.
+
+`cancel()` ends a pending press or an active drag without committing it. Losing window focus also cancels the gesture. An active drag reports the idle state through `onChange`, and the controller remains usable for the next press. `cleanup()` also ends any gesture, but silently, for unmounting. A browser `pointercancel` ends the gesture without suppressing a later click, since the canceled pointer does not generate one.
+
+#### Items of different sizes
+
+The drop slot follows the pointer: an item moves past a neighbor once the pointer crosses that neighbor's midpoint. At drag start, the controller reads the list element's writing direction. If no list element is registered, it reads the first item's direction. Horizontal auto-scroll supports RTL containers, whose scroll position runs from 0 into negative values. When items differ in size and you move the dragged item with the pointer, a wide item grabbed near its start can cover a narrow neighbor before the pointer reaches it. Pass `getCollisionPoint` to pick the slot from another point, such as the dragged item's leading edge, so it swaps once it covers half of the neighbor:
+
+```ts
+const controller = createReorderableList({
+    getItems: () => columns,
+    setItems: (next) => (columns = next),
+    getCollisionPoint: ({ origin, position }, item) => {
+        const offset = position.clientX - origin.clientX
+
+        return { clientX: (offset > 0 ? item.right : item.left) + offset, clientY: position.clientY }
+    },
+})
+```
+
+`item` is the dragged item's box as measured when the drag started, in the same coordinates as the other items. The returned point is kept within the items, so an edge pushed past the end picks the last slot. Returning `null` picks the slot from the pointer, as when the option is omitted. Whether a release drops or cancels still follows the pointer itself: leaving the list area cancels the drop even while the collision point stays inside.
+
 #### Reorderable List Options
 
 | Option | Type | Default | Description |
@@ -469,9 +519,66 @@ Use `getPreviewOrder()` or `getPreviewItems()` during pointer dragging when your
 | `canReorder` | `() => boolean` | `true` | Guard before starting or committing a reorder |
 | `getBounds` | `() => ReorderBounds \| null` | Registered list rect | Optional outer active area |
 | `autoScroll` | `boolean \| AutoScrollerOptions` | `false` | Edge auto-scroll while dragging |
+| `activationDistance` | `number` | `0` | Pointer travel in CSS pixels before a press starts dragging |
+| `suppressClickAfterDrag` | `boolean` | `false` | Ignore the click that follows a pointer drag |
+| `getCollisionPoint` | `(pointer, item) => ReorderPoint \| null` | Pointer | Point that picks the drop slot while dragging |
 | `onChange` | `(state) => void` | `undefined` | Called when pointer drag state changes |
 | `onBeforeReorder` | `(move, context) => void` | `undefined` | Called before writing items or firing `onReorder` |
 | `onReorder` | `(move, context) => void` | `undefined` | Called after a valid keyboard or pointer reorder |
+
+#### Reorderable List Controller
+
+| Method | Description |
+|--------|-------------|
+| `setListElement(element)` | Register the outer list element used for default bounds and auto-scroll ancestry |
+| `setItemElement(index, element)` | Register or unregister an item element by index |
+| `getItemElements()` | Registered item elements ordered by index |
+| `getPreviewOrder()` | Item indices in their live pointer preview order |
+| `getPreviewItems()` | Items with their source and visual indices for the live preview |
+| `moveItem(index, direction)` | Commit an `'up'` or `'down'` keyboard reorder |
+| `pointerDown(index, event)` | Begin a pointer reorder from a handle's `pointerdown` event |
+| `getPointer()` | Origin and latest position of the active drag, or `null` |
+| `cancel()` | End a pending press or active drag without committing it |
+| `cleanup()` | End any gesture silently and remove listeners |
+
+### getReorderOffsets
+
+When you preview a reorder by moving items with transforms, `getReorderOffsets` tells you how far each item in a single row or column has to move. Pass the items' boxes in their current order and the new order as a list of their indices. You get back one offset per item, along the list's axis:
+
+```ts
+import { getReorderOffsets } from '@inertiaui/vanilla'
+
+const rects = items.map((item) => item.getBoundingClientRect())
+const offsets = getReorderOffsets(rects, [2, 0, 1])
+
+items.forEach((item, index) => (item.style.transform = `translateY(${offsets[index]}px)`))
+```
+
+The offsets describe the movement between the items packed in their current order and packed in the new one, so items of different sizes line up and an unchanged order returns zero offsets. Each gap between neighboring slots stays where it is, which keeps a flex `gap` intact. Wrapping layouts with several rows aren't supported. Pass `gap` when the boxes don't show the real spacing, for example table cells stuck in place by sticky positioning. Both layouts then use that spacing, and `gap: 0` packs the cells edge to edge. An order that isn't a permutation of the item indices leaves every item where it is.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `axis` | `'x' \| 'y'` | `'y'` | Axis the items are laid out along |
+| `reverse` | `boolean` | `false` | The items run toward the start of the axis, as in a right-to-left row |
+| `gap` | `number` | Measured | Space between neighboring items |
+
+### getScrollableAncestors
+
+`getScrollableAncestors(element, axis?)` lists the ancestors of an element that can scroll, nearest first, followed by its window. It follows assigned slots and crosses shadow roots through their hosts. Pass `'x'` or `'y'` to keep only the ancestors that scroll along that axis, for example to give a horizontal list's auto-scroll a fixed set of containers for the whole drag:
+
+```ts
+import { createReorderableList, getScrollableAncestors, type AutoScrollContainer } from '@inertiaui/vanilla'
+
+let containers: AutoScrollContainer[] | null = null
+
+const controller = createReorderableList({
+    getItems: () => columns,
+    autoScroll: { axis: 'x', getScrollContainers: () => (containers ??= getScrollableAncestors(row, 'x')) },
+    onChange: (state) => state.draggedIndex === null && (containers = null),
+})
+```
+
+Without `getScrollContainers`, the controller finds the scrollable ancestors along both axes itself.
 
 ## Positioning
 
@@ -867,6 +974,24 @@ Use `<dialog>` when `native` is true. Otherwise render a container with `role="d
 
 `transition(visible)` and `onMount({ dialog, panel, native })` follow the same transition/cleanup contract as tooltips. Reopening during a closing transition keeps the dialog open. Call `cleanup()` before removing DOM or disposing the owner. It releases mounted behavior without changing logical `isOpen`, allowing framework effect replay. Call `close()` for an actual state change.
 
+## Inline Styles
+
+`captureInlineStyles(element, properties)` remembers an element's inline values for some CSS properties, including `!important` priorities, so you can undo temporary changes without touching its other inline styles. Name the properties as in CSS:
+
+```ts
+import { captureInlineStyles } from '@inertiaui/vanilla'
+
+const styles = captureInlineStyles(row, ['transform', 'z-index'])
+row.style.zIndex = '10'
+row.style.transform = 'translateY(40px)'
+
+// Put back the transform now and the z-index later.
+styles.restore(['transform'])
+styles.restore()
+```
+
+A property that had no inline value is removed again on restore.
+
 ## CSS Variable Inheritance
 
 `inheritCssVariables(source, target, { filter, mediaQueries })` copies selected computed custom properties to a portal and returns a cleanup function. It watches ancestor class/style changes and the supplied media queries. Cleanup restores prior inline values and priorities when its own value is still present; consumer value overrides are preserved.
@@ -1096,6 +1221,36 @@ if (!prefersReducedMotion() && supportsWebAnimations()) {
     const snapshot = captureAnimationSnapshot(rows())
 }
 ```
+
+### createLayoutAnimation
+
+`createLayoutAnimation` keeps track of snapshot animations that wait for your renderer, so a new gesture or an unmount can interrupt them. Capture a snapshot before the change, then hand it over with a function that returns the elements once they are rendered:
+
+```typescript
+import { captureAnimationSnapshot, createLayoutAnimation } from '@inertiaui/vanilla'
+
+const layout = createLayoutAnimation({ duration: 160, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'none' })
+
+const snapshot = captureAnimationSnapshot(rows())
+renderItemsInNewOrder()
+
+layout.animate(snapshot, rows, {
+    onStart: () => movedRow.focus({ preventScroll: true }),
+    onSettle: () => (movedRow.style.zIndex = ''),
+})
+```
+
+The animation starts on the next animation frame. Pass `schedule` when your renderer updates later or sooner: it receives a function to call once the new layout is in place and may return a function that cancels the call. For example, `schedule: (run) => void nextTick(run)` in Vue.
+
+`onStart` runs with the started animations right after they start. `onSettle` runs once every animation of that run has finished or been canceled, also when a later run takes over the same elements or when you call `cancel()`. Use it to undo styles that the move needed. When nothing animates, for example because the user prefers reduced motion, `onSettle` still runs, shortly after `onStart` rather than in the same call.
+
+| Method | Description |
+|--------|-------------|
+| `animate(snapshot, getElements, callbacks?)` | Animate the elements from the snapshot once the renderer has updated |
+| `cancel()` | Drop runs that haven't started and cancel running animations, which still settle |
+| `cleanup()` | Stop everything without calling back and ignore later runs |
+
+The options are those of `animateFromSnapshot`, plus `schedule`.
 
 ### cancelAnimations
 
@@ -1743,6 +1898,8 @@ import type {
     ReorderCommitContext,
     ReorderDirection,
     ReorderMove,
+    ReorderPoint,
+    ReorderPointer,
     ReorderPreviewItem,
     ReorderableListController,
     ReorderableListOptions,

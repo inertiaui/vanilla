@@ -134,6 +134,28 @@
             </div>
         </section>
 
+        <section>
+            <h2>Activation distance</h2>
+            <ul id="activation-list" class="reorder-list"></ul>
+            <div class="status-row">
+                <span class="status"
+                    ><span class="label">Order:</span> <span class="value" id="activation-order"></span
+                ></span>
+                <span class="status"
+                    ><span class="label">Dragging:</span> <span class="value" id="activation-dragging">no</span></span
+                >
+                <span class="status"
+                    ><span class="label">Drags started:</span> <span class="value" id="activation-starts">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Clicks:</span> <span class="value" id="activation-clicks">0</span></span
+                >
+                <span class="status"
+                    ><span class="label">Offset:</span> <span class="value" id="activation-offset">none</span></span
+                >
+            </div>
+        </section>
+
         <script type="module">
             import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '../../src/reorder.ts'
 
@@ -351,8 +373,67 @@
                 })
             }
 
+            let activationItems = ['One', 'Two', 'Three']
+            let activationDragging = false
+            let activationStarts = 0
+            let activationClicks = 0
+            const activationList = document.getElementById('activation-list')
+
+            const activationController = createReorderableList({
+                getItems: () => activationItems,
+                setItems: (nextItems) => {
+                    activationItems = nextItems
+                    renderActivation()
+                },
+                activationDistance: 8,
+                suppressClickAfterDrag: true,
+                onChange: (next) => {
+                    const pointer = activationController.getPointer()
+                    if (next.draggedIndex !== null && !activationDragging) activationStarts++
+                    activationDragging = next.draggedIndex !== null
+                    document.getElementById('activation-dragging').textContent = activationDragging ? 'yes' : 'no'
+                    document.getElementById('activation-starts').textContent = String(activationStarts)
+                    document.getElementById('activation-offset').textContent = pointer
+                        ? `${Math.round(pointer.position.clientX - pointer.origin.clientX)},${Math.round(pointer.position.clientY - pointer.origin.clientY)}`
+                        : 'none'
+                },
+            })
+            activationController.setListElement(activationList)
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && activationDragging) activationController.cancel()
+            })
+
+            function renderActivation() {
+                document.getElementById('activation-order').textContent = activationItems.join(',')
+                activationList.innerHTML = ''
+
+                activationItems.forEach((label, index) => {
+                    const li = document.createElement('li')
+                    li.className = 'reorder-item'
+                    li.id = `activation-item-${index}`
+
+                    const handle = document.createElement('button')
+                    handle.type = 'button'
+                    handle.className = 'reorder-handle'
+                    handle.id = `activation-handle-${index}`
+                    handle.textContent = label
+                    handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+                    handle.addEventListener('pointerdown', (event) => activationController.pointerDown(index, event))
+                    handle.addEventListener('click', () => {
+                        activationClicks++
+                        document.getElementById('activation-clicks').textContent = String(activationClicks)
+                    })
+
+                    li.append(handle)
+                    activationController.setItemElement(index, li)
+                    activationList.appendChild(li)
+                })
+            }
+
             render()
             renderAutoScroll()
+            renderActivation()
         </script>
     </body>
 </html>

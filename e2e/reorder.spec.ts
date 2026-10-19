@@ -168,3 +168,96 @@ test.describe('pointer reorder', () => {
         await expect(page.locator('#auto-scroll-dragging')).toHaveText('no')
     })
 })
+
+test.describe('activation distance', () => {
+    async function pressHandle(page, index: number) {
+        await page.locator('#activation-list').scrollIntoViewIfNeeded()
+        const box = (await page.locator(`#activation-handle-${index}`).boundingBox())!
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+        await page.mouse.down()
+
+        return box
+    }
+
+    test('a press below the distance keeps its native focus and click', async ({ page }) => {
+        const box = await pressHandle(page, 0)
+        await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 3)
+
+        await expect(page.locator('#activation-handle-0')).toBeFocused()
+        expect(await page.locator('#activation-handle-0').evaluate((handle) => handle.hasPointerCapture(1))).toBe(false)
+
+        await page.mouse.up()
+        await expect(page.locator('#activation-clicks')).toHaveText('1')
+        await expect(page.locator('#activation-starts')).toHaveText('0')
+        await expect(page.locator('#activation-order')).toHaveText('One,Two,Three')
+    })
+
+    test('starts after the distance, reports the pointer offset, and suppresses the following click', async ({
+        page,
+    }) => {
+        const box = await pressHandle(page, 0)
+        const target = (await page.locator('#activation-item-1').boundingBox())!
+        await page.mouse.move(box.x + box.width / 2, target.y + target.height - 2, { steps: 4 })
+
+        await expect(page.locator('#activation-dragging')).toHaveText('yes')
+        await expect(page.locator('#activation-offset')).toHaveText(
+            `0,${Math.round(target.y + target.height - 2 - (box.y + box.height / 2))}`,
+        )
+        expect(await page.locator('#activation-handle-0').evaluate((handle) => handle.hasPointerCapture(1))).toBe(true)
+
+        await page.mouse.up()
+        await expect(page.locator('#activation-order')).toHaveText('Two,One,Three')
+        await expect(page.locator('#activation-dragging')).toHaveText('no')
+        await expect(page.locator('#activation-offset')).toHaveText('none')
+        await expect(page.locator('#activation-clicks')).toHaveText('0')
+    })
+
+    test('cancel() ends a drag without committing and keeps the next keyboard click', async ({ page }) => {
+        const box = await pressHandle(page, 0)
+        const target = (await page.locator('#activation-item-2').boundingBox())!
+        await page.mouse.move(box.x + box.width / 2, target.y + target.height - 2, { steps: 4 })
+        await expect(page.locator('#activation-dragging')).toHaveText('yes')
+
+        await page.keyboard.press('Escape')
+        await expect(page.locator('#activation-dragging')).toHaveText('no')
+        await page.mouse.up()
+        await expect(page.locator('#activation-order')).toHaveText('One,Two,Three')
+        await expect(page.locator('#activation-clicks')).toHaveText('0')
+
+        await page.locator('#activation-handle-0').focus()
+        await page.keyboard.press('Enter')
+        await expect(page.locator('#activation-clicks')).toHaveText('1')
+    })
+
+    test('suppresses a drag click on a handle that stays mounted and preserves the next click', async ({ page }) => {
+        const box = await pressHandle(page, 0)
+        const x = box.x + box.width / 2
+        const y = box.y + box.height / 2
+        await page.mouse.move(x + 10, y)
+        await expect(page.locator('#activation-dragging')).toHaveText('yes')
+        await page.mouse.move(x, y)
+        await page.mouse.up()
+
+        await expect(page.locator('#activation-order')).toHaveText('One,Two,Three')
+        await expect(page.locator('#activation-clicks')).toHaveText('0')
+        await page.locator('#activation-handle-0').click()
+        await expect(page.locator('#activation-clicks')).toHaveText('1')
+    })
+
+    test('losing window focus ends pending presses and active drags without a reorder', async ({ page }) => {
+        await pressHandle(page, 0)
+        await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+        await page.mouse.up()
+        const target = (await page.locator('#activation-item-2').boundingBox())!
+        await page.mouse.move(target.x + target.width / 2, target.y + target.height - 2)
+        await expect(page.locator('#activation-starts')).toHaveText('0')
+
+        await pressHandle(page, 0)
+        await page.mouse.move(target.x + target.width / 2, target.y + target.height - 2)
+        await expect(page.locator('#activation-dragging')).toHaveText('yes')
+        await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+        await expect(page.locator('#activation-dragging')).toHaveText('no')
+        await page.mouse.up()
+        await expect(page.locator('#activation-order')).toHaveText('One,Two,Three')
+    })
+})

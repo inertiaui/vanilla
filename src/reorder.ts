@@ -9,9 +9,16 @@ export const REORDERABLE_LIST_HANDLE_ATTRIBUTE = 'data-reorderable-list-handle'
 export type ReorderDirection = 'up' | 'down'
 export type ReorderSource = 'keyboard' | 'pointer'
 
-type ReorderPoint = {
+export type ReorderPoint = {
     clientX: number
     clientY: number
+}
+
+export type ReorderPointer = {
+    /** Where the press started. */
+    readonly origin: ReorderPoint
+    /** The latest pointer position. */
+    readonly position: ReorderPoint
 }
 
 type ReorderHitBox = ReorderBounds & {
@@ -65,6 +72,8 @@ interface ReorderInsertionOptions {
      * headers or empty padding. Item midpoint math still uses the item boxes.
      */
     bounds?: ReorderBounds | null
+    /** Read rows from right to left, as the list is written. */
+    rightToLeft?: boolean
 }
 
 export type ReorderPreviewItem<T> = {
@@ -101,6 +110,23 @@ export interface ReorderableListOptions<T> {
     getBounds?: () => ReorderBounds | null
     /** Optional edge auto-scroll while pointer-dragging. Disabled by default. */
     autoScroll?: boolean | AutoScrollerOptions
+    /**
+     * Pointer travel in CSS pixels before a press starts dragging. Until then the
+     * press keeps its native click, focus, and scrolling. Defaults to 0, which
+     * starts dragging on press.
+     */
+    activationDistance?: number
+    /** Ignore the click that follows a pointer drag, so releasing over a control does not activate it. Defaults to false. */
+    suppressClickAfterDrag?: boolean
+    /**
+     * Point that picks the drop slot while pointer-dragging, given the pointer and
+     * the dragged item's box as measured when the drag started. Returning the
+     * item's leading edge lets items of different sizes swap once the dragged
+     * item covers half of a neighbor. The point is clamped to the items' extent,
+     * and returning null uses the pointer, which is also the default. Whether a
+     * release drops or cancels always follows the pointer itself.
+     */
+    getCollisionPoint?: (pointer: ReorderPointer, item: ReorderBounds) => ReorderPoint | null
     /** Called whenever pointer drag state changes. */
     onChange?: (state: ReorderableListState) => void
     /** Called immediately before items are written or `onReorder` fires. */
@@ -124,7 +150,18 @@ export interface ReorderableListController<T> {
     moveItem: (index: number, direction: ReorderDirection) => ReorderMove<T> | null
     /** Begin a pointer reorder from a registered handle event. */
     pointerDown: (index: number, event: PointerEvent) => void
-    /** Cancel active pointer work and remove global listeners. Idempotent. */
+    /**
+     * Pointer positions of the active drag, or null while idle and before a press
+     * starts dragging. The object lives for the whole gesture and its `position`
+     * is replaced as the pointer moves, so copy the values you need to keep.
+     */
+    getPointer: () => ReorderPointer | null
+    /**
+     * End a pending press or active pointer drag without committing it. An active
+     * drag notifies `onChange` with the idle state. The controller stays usable.
+     */
+    cancel: () => void
+    /** Cancel active pointer work and remove global listeners without notifying `onChange`. Idempotent. */
     cleanup: CleanupFunction
 }
 
@@ -159,6 +196,40 @@ function isHTMLElement(value: unknown): value is HTMLElement {
     return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement
 }
 
+function isMeasuredHitBox(hitBox: ReorderHitBox): boolean {
+    return (
+        Number.isFinite(hitBox.index) &&
+        Number.isFinite(hitBox.left) &&
+        Number.isFinite(hitBox.top) &&
+        Number.isFinite(hitBox.right) &&
+        Number.isFinite(hitBox.bottom) &&
+        hitBox.left <= hitBox.right &&
+        hitBox.top <= hitBox.bottom
+    )
+}
+
+/** Move a point inside the area the measured items cover. */
+function clampToHitBoxes(hitBoxes: readonly ReorderHitBox[], point: ReorderPoint): ReorderPoint {
+    let left = Infinity
+    let top = Infinity
+    let right = -Infinity
+    let bottom = -Infinity
+
+    for (const hitBox of hitBoxes) {
+        if (isMeasuredHitBox(hitBox)) {
+            left = Math.min(left, hitBox.left)
+            top = Math.min(top, hitBox.top)
+            right = Math.max(right, hitBox.right)
+            bottom = Math.max(bottom, hitBox.bottom)
+        }
+    }
+
+    return {
+        clientX: Math.min(Math.max(point.clientX, left), right),
+        clientY: Math.min(Math.max(point.clientY, top), bottom),
+    }
+}
+
 /**
  * Resolve the insertion index for vertical lists and multi-item rows. Select
  * the first matching item by index (or left edge within a row) in one pass,
@@ -179,17 +250,14 @@ function getInsertionIndexFromPoint(
     let rowCount = 0
     let rowMatch: ReorderHitBox | null = null
     let rowLast: ReorderHitBox | null = null
+    // Where rowMatch and rowLast start along the row's reading direction.
+    let rowMatchStart = 0
+    let rowLastStart = 0
+    // Right-to-left rows read mirrored, so their first item is the rightmost.
+    const reading = options.rightToLeft ? -1 : 1
 
     for (const hitBox of hitBoxes) {
-        if (
-            !Number.isFinite(hitBox.index) ||
-            !Number.isFinite(hitBox.left) ||
-            !Number.isFinite(hitBox.top) ||
-            !Number.isFinite(hitBox.right) ||
-            !Number.isFinite(hitBox.bottom) ||
-            hitBox.left > hitBox.right ||
-            hitBox.top > hitBox.bottom
-        ) {
+        if (!isMeasuredHitBox(hitBox)) {
             continue
         }
 
@@ -206,22 +274,19 @@ function getInsertionIndexFromPoint(
         }
 
         if (point.clientY >= hitBox.top && point.clientY <= hitBox.bottom) {
-            // Rows use visual left-to-right order, with item index breaking ties.
+            // Rows use visual order in their reading direction, with item index breaking ties.
             rowCount++
-            if (
-                !rowLast ||
-                hitBox.left > rowLast.left ||
-                (hitBox.left === rowLast.left && hitBox.index > rowLast.index)
-            ) {
+            const start = options.rightToLeft ? -hitBox.right : hitBox.left
+            if (!rowLast || start > rowLastStart || (start === rowLastStart && hitBox.index > rowLast.index)) {
                 rowLast = hitBox
+                rowLastStart = start
             }
             if (
-                point.clientX <= hitBox.left + (hitBox.right - hitBox.left) / 2 &&
-                (!rowMatch ||
-                    hitBox.left < rowMatch.left ||
-                    (hitBox.left === rowMatch.left && hitBox.index < rowMatch.index))
+                reading * point.clientX <= reading * (hitBox.left + (hitBox.right - hitBox.left) / 2) &&
+                (!rowMatch || start < rowMatchStart || (start === rowMatchStart && hitBox.index < rowMatch.index))
             ) {
                 rowMatch = hitBox
+                rowMatchStart = start
             }
         }
     }
@@ -267,6 +332,86 @@ function resolveTargetIndexFromInsertion(
     return targetIndex
 }
 
+export interface ReorderOffsetsOptions {
+    /** Axis the items are laid out along. Defaults to `'y'`. */
+    axis?: 'x' | 'y'
+    /** The items run toward the start of the axis, as in a right-to-left row. Defaults to false. */
+    reverse?: boolean
+    /**
+     * Space between neighboring items, used for both orders. Defaults to the gap
+     * each slot has now, which suits lists whose items are measured where they lie
+     * in the flow. Pass 0 for items that touch, such as table cells, when some boxes
+     * are measured elsewhere, for instance stuck in place by sticky positioning.
+     */
+    gap?: number
+}
+
+function isPermutation(order: readonly number[], count: number): boolean {
+    if (order.length !== count) {
+        return false
+    }
+
+    const seen = new Uint8Array(count)
+
+    for (const index of order) {
+        if (!Number.isInteger(index) || index < 0 || index >= count || seen[index]) {
+            return false
+        }
+
+        seen[index] = 1
+    }
+
+    return true
+}
+
+/**
+ * Return how far each item moves along the axis when the items are laid out in
+ * `order`, a permutation of their indices. The offsets describe the movement
+ * between the items packed in their current order and packed in `order`, so items
+ * of different sizes line up and an unchanged order returns zero offsets. Each gap
+ * between neighboring slots stays in place, or is `gap` in both layouts when
+ * given. An order that is not a permutation of the items leaves every item where
+ * it is.
+ */
+export function getReorderOffsets(
+    rects: readonly ReorderBounds[],
+    order: readonly number[],
+    options: ReorderOffsetsOptions = {},
+): number[] {
+    const offsets = rects.map(() => 0)
+
+    if (rects.length === 0 || !isPermutation(order, rects.length)) {
+        return offsets
+    }
+
+    const [start, end] = options.axis === 'x' ? (['left', 'right'] as const) : (['top', 'bottom'] as const)
+    const [leading, trailing] = options.reverse ? [end, start] : [start, end]
+    const direction = options.reverse ? -1 : 1
+    // Each offset is where the new order packs the item minus where its old slot
+    // packs it, from the same origin, so an item measured away from its slot, such
+    // as a sticky cell, doesn't shift the others.
+    let original = 0
+    let target = 0
+
+    for (const [slot, index] of order.entries()) {
+        const rect = rects[slot]!
+        const next = rects[slot + 1]
+        // The gap after this slot, signed along the direction the items run.
+        const signedGap = next
+            ? options.gap === undefined
+                ? next[leading] - rect[trailing]
+                : direction * options.gap
+            : 0
+
+        offsets[index] += target
+        offsets[slot]! -= original
+        target += direction * (rects[index]![end] - rects[index]![start]) + signedGap
+        original += direction * (rect[end] - rect[start]) + signedGap
+    }
+
+    return offsets
+}
+
 /**
  * Return true when the event target is a reorder handle carrying
  * `REORDERABLE_LIST_HANDLE_ATTRIBUTE="true"`.
@@ -280,6 +425,10 @@ function isShadowRoot(value: unknown): value is ShadowRoot {
 }
 
 function getParentNodeAcrossShadowDom(node: Node): Node | null {
+    if (node instanceof Element && node.assignedSlot) {
+        return node.assignedSlot
+    }
+
     if (node.parentNode) {
         return node.parentNode
     }
@@ -343,10 +492,10 @@ function canOverflow(value: string): boolean {
     return value === 'auto' || value === 'scroll' || value === 'overlay'
 }
 
-function isScrollableElement(element: Element): boolean {
+function isScrollableElement(element: Element, axis: AutoScrollAxis): boolean {
     const style = getComputedStyle(element)
-    const canScrollY = canOverflow(style.overflowY) && element.scrollHeight > element.clientHeight
-    const canScrollX = canOverflow(style.overflowX) && element.scrollWidth > element.clientWidth
+    const canScrollY = axis !== 'x' && canOverflow(style.overflowY) && element.scrollHeight > element.clientHeight
+    const canScrollX = axis !== 'y' && canOverflow(style.overflowX) && element.scrollWidth > element.clientWidth
 
     return canScrollY || canScrollX
 }
@@ -363,7 +512,12 @@ function isWindowContainer(container: AutoScrollContainer): container is Window 
     return typeof Window !== 'undefined' && container instanceof Window
 }
 
-function getScrollableAncestors(element: Element | null): AutoScrollContainer[] {
+/**
+ * Ancestors of `element` that can scroll, nearest first, followed by its window.
+ * Pass an axis to keep only the ancestors that scroll along it. Shadow roots are
+ * crossed through their hosts.
+ */
+export function getScrollableAncestors(element: Element | null, axis: AutoScrollAxis = 'both'): AutoScrollContainer[] {
     const containers: AutoScrollContainer[] = []
     const ownerWindow = getOwnerWindow(element)
     let node: Node | null = element
@@ -371,7 +525,7 @@ function getScrollableAncestors(element: Element | null): AutoScrollContainer[] 
     while (node) {
         node = getParentNodeAcrossShadowDom(node)
 
-        if (node instanceof Element && isScrollableElement(node)) {
+        if (node instanceof Element && isScrollableElement(node, axis)) {
             containers.push(node)
         }
     }
@@ -430,9 +584,25 @@ function getMaxScrollPosition(container: AutoScrollContainer, axis: 'x' | 'y'): 
     )
 }
 
-function canScroll(container: AutoScrollContainer, axis: 'x' | 'y', direction: number): boolean {
+function scrollsRightToLeft(container: AutoScrollContainer): boolean {
+    const element = isWindowContainer(container) ? getScrollElement(container) : container
+
+    return element !== null && getComputedStyle(element).direction === 'rtl'
+}
+
+function canScroll(
+    container: AutoScrollContainer,
+    axis: 'x' | 'y',
+    direction: number,
+    isRightToLeft: (container: AutoScrollContainer) => boolean,
+): boolean {
     const position = getScrollPosition(container, axis)
     const maxPosition = getMaxScrollPosition(container, axis)
+
+    // Right-to-left boxes start at 0 on the right and scroll left into negative positions.
+    if (axis === 'x' && isRightToLeft(container)) {
+        return direction < 0 ? position > -maxPosition : position < 0
+    }
 
     return direction < 0 ? position > 0 : position < maxPosition
 }
@@ -455,6 +625,7 @@ function getAutoScrollVector(
     point: ReorderPoint,
     edgeThreshold: number,
     maxStep: number,
+    isRightToLeft: (container: AutoScrollContainer) => boolean,
 ): { left: number; top: number } {
     const rect = getContainerRect(container)
     const width = rect.right - rect.left
@@ -463,8 +634,8 @@ function getAutoScrollVector(
     const yThreshold = Math.min(edgeThreshold, Math.max(0, height / 2))
     const xIntensity = edgeIntensity(point.clientX, rect.left, rect.right, xThreshold)
     const yIntensity = edgeIntensity(point.clientY, rect.top, rect.bottom, yThreshold)
-    const left = xIntensity !== 0 && canScroll(container, 'x', xIntensity) ? xIntensity * maxStep : 0
-    const top = yIntensity !== 0 && canScroll(container, 'y', yIntensity) ? yIntensity * maxStep : 0
+    const left = xIntensity !== 0 && canScroll(container, 'x', xIntensity, isRightToLeft) ? xIntensity * maxStep : 0
+    const top = yIntensity !== 0 && canScroll(container, 'y', yIntensity, isRightToLeft) ? yIntensity * maxStep : 0
 
     return { left, top }
 }
@@ -505,6 +676,8 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
     let frameId: number | null = null
     let lastTimestamp: number | null = null
     let cleaned = false
+    // Writing direction of each container, read once per gesture when it first scrolls sideways.
+    const rightToLeft = new Map<AutoScrollContainer, boolean>()
 
     function queueFrame() {
         if (cleaned || frameId !== null || typeof requestAnimationFrame !== 'function') {
@@ -512,6 +685,17 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         }
 
         frameId = requestAnimationFrame(step)
+    }
+
+    function readsRightToLeft(container: AutoScrollContainer): boolean {
+        let value = rightToLeft.get(container)
+
+        if (value === undefined) {
+            value = scrollsRightToLeft(container)
+            rightToLeft.set(container, value)
+        }
+
+        return value
     }
 
     function stop() {
@@ -524,6 +708,7 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         containers = []
         frameId = null
         lastTimestamp = null
+        rightToLeft.clear()
     }
 
     function step(timestamp: number) {
@@ -542,7 +727,7 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         lastTimestamp = timestamp
 
         for (const container of containers) {
-            const vector = getAutoScrollVector(container, latestPoint, edgeThreshold, maxStep)
+            const vector = getAutoScrollVector(container, latestPoint, edgeThreshold, maxStep, readsRightToLeft)
             const left = handledX ? 0 : vector.left
             const top = handledY ? 0 : vector.top
 
@@ -606,6 +791,8 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
 interface PointerReorderOptions {
     /** Capture drag geometry only after the initiating pointer has been accepted. */
     onStart: () => void
+    /** Whether rows read from right to left, as decided when the drag started. */
+    isRightToLeft?: () => boolean
     /**
      * Return the current hit boxes for every reorderable item. Called on each
      * pointer move and auto-scroll frame so callers can measure fresh
@@ -620,6 +807,12 @@ interface PointerReorderOptions {
     canReorder?: () => boolean
     /** Optional edge auto-scroll while pointer-dragging. Disabled by default. */
     autoScroll?: boolean | AutoScrollerOptions
+    /** Pointer travel before a press starts dragging. Defaults to 0. */
+    activationDistance?: number
+    /** Ignore the click that follows a drag. Defaults to false. */
+    suppressClickAfterDrag?: boolean
+    /** Point that picks the drop slot instead of the pointer. Defaults to the pointer. */
+    getCollisionPoint?: (pointer: ReorderPointer, item: ReorderBounds) => ReorderPoint | null
     /** Called whenever the dragged/target/insertion indices change (drag start, move, end). */
     onChange?: (state: PointerReorderState) => void
     /** Called once on pointer up with a resolved, in-range move. */
@@ -637,8 +830,12 @@ interface PointerReorderController {
     pointerDown: (index: number, event: PointerEvent) => void
     /** Current interaction state. */
     getState: () => PointerReorderState
+    /** Pointer positions of the active drag. */
+    getPointer: () => ReorderPointer | null
     /** True while a pointer drag is active. */
     isDragging: () => boolean
+    /** End a pending press or active drag without committing it. */
+    cancel: () => void
     /** Cancel any active drag and remove all window listeners. Idempotent. */
     cleanup: CleanupFunction
 }
@@ -680,6 +877,7 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
     let listElement: HTMLElement | null = null
     let pointerState: ReorderableListState = idleState
     let dragHitBoxes: ReorderHitBox[] | null = null
+    let dragRightToLeft = false
     let lastPreviewedPointerTargetIndex: number | null = null
     const itemElements = new Map<number, HTMLElement>()
 
@@ -748,12 +946,19 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
     const pointerReorder = createPointerReorder({
         onStart: () => {
             dragHitBoxes = measureItemHitBoxes()
+            // Rows follow the list's writing direction, read once per drag.
+            const element = listElement ?? itemElements.values().next().value
+            dragRightToLeft = !!element && getComputedStyle(element).direction === 'rtl'
         },
+        isRightToLeft: () => dragRightToLeft,
         getItemCount: itemCount,
         getHitBoxes,
         getBounds,
         canReorder,
         autoScroll: options.autoScroll ?? false,
+        activationDistance: options.activationDistance,
+        suppressClickAfterDrag: options.suppressClickAfterDrag,
+        getCollisionPoint: options.getCollisionPoint,
         onChange: (state) => {
             if (state.draggedIndex !== null) {
                 lastPreviewedPointerTargetIndex = state.targetIndex
@@ -815,6 +1020,8 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
             })
         },
         pointerDown: pointerReorder.pointerDown,
+        getPointer: pointerReorder.getPointer,
+        cancel: pointerReorder.cancel,
         cleanup: () => {
             pointerReorder.cleanup()
             dragHitBoxes = null
@@ -832,16 +1039,25 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
  */
 function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
     const canReorder = () => (options.canReorder?.() ?? true) && options.getItemCount() > 1
+    const isValidIndex = (index: number) => Number.isInteger(index) && index >= 0 && index < options.getItemCount()
     let activePointer: {
         fromIndex: number
         pointerId: number
         captureElement: HTMLElement | null
         scrollElement: HTMLElement | null
     } | null = null
+    // A press that has not yet travelled the activation distance.
+    let pendingPointer: {
+        fromIndex: number
+        pointerId: number
+        handle: HTMLElement
+    } | null = null
+    let pointer: { origin: ReorderPoint; position: ReorderPoint } | null = null
     let insertionIndex: number | null = null
     let pointerOverReorderArea = false
     let lastPoint: ReorderPoint | null = null
     let cleaned = false
+    const activationDistance = finiteNumber(options.activationDistance, 0)
     const autoScrollOptions = options.autoScroll === true ? {} : options.autoScroll || null
     const autoScroller = autoScrollOptions
         ? createAutoScroller({
@@ -880,28 +1096,56 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function updateInsertionIndex(point: ReorderPoint) {
+        const hitBoxes = options.getHitBoxes()
         const nextInsertionIndex = getInsertionIndexFromPoint(
-            options.getHitBoxes(),
+            hitBoxes,
             {
                 clientX: point.clientX,
                 clientY: point.clientY,
             },
             {
                 bounds: options.getBounds?.() ?? null,
+                rightToLeft: options.isRightToLeft?.(),
             },
         )
 
+        // The pointer decides whether a release drops or cancels, even when another point picks the slot.
         pointerOverReorderArea = nextInsertionIndex !== null
 
         if (nextInsertionIndex !== null) {
-            insertionIndex = nextInsertionIndex
+            insertionIndex = getCollisionInsertionIndex(hitBoxes) ?? nextInsertionIndex
         }
+    }
+
+    /** The insertion index at the caller's collision point, or null to use the pointer. */
+    function getCollisionInsertionIndex(hitBoxes: readonly ReorderHitBox[]): number | null {
+        const getCollisionPoint = options.getCollisionPoint
+
+        if (!getCollisionPoint || !activePointer || !pointer) {
+            return null
+        }
+
+        const fromIndex = activePointer.fromIndex
+        const item = hitBoxes.find((hitBox) => hitBox.index === fromIndex)
+        const point = item ? getCollisionPoint(pointer, item) : null
+
+        if (!point || !Number.isFinite(point.clientX) || !Number.isFinite(point.clientY)) {
+            return null
+        }
+
+        return getInsertionIndexFromPoint(hitBoxes, clampToHitBoxes(hitBoxes, point), {
+            rightToLeft: options.isRightToLeft?.(),
+        })
     }
 
     function updatePointerPosition(event: PointerEvent, shouldAutoScroll: boolean) {
         lastPoint = {
             clientX: event.clientX,
             clientY: event.clientY,
+        }
+
+        if (pointer) {
+            pointer.position = lastPoint
         }
 
         updateInsertionIndex(lastPoint)
@@ -917,7 +1161,10 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
         window.removeEventListener('pointermove', handleWindowPointerMove)
         window.removeEventListener('pointerup', handleWindowPointerUp)
         window.removeEventListener('pointercancel', handleWindowPointerCancel)
+        window.removeEventListener('blur', cancel)
         activePointer = null
+        pendingPointer = null
+        pointer = null
         insertionIndex = null
         pointerOverReorderArea = false
         lastPoint = null
@@ -940,6 +1187,26 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerMove(event: PointerEvent) {
+        const pending = pendingPointer
+
+        if (pending?.pointerId === event.pointerId && pointer) {
+            if (
+                Math.hypot(event.clientX - pointer.origin.clientX, event.clientY - pointer.origin.clientY) <
+                activationDistance
+            ) {
+                return
+            }
+
+            pendingPointer = null
+
+            if (!canReorder() || !isValidIndex(pending.fromIndex)) {
+                stop()
+                return
+            }
+
+            activate(pending.fromIndex, event, pending.handle)
+        }
+
         if (activePointer?.pointerId !== event.pointerId) {
             return
         }
@@ -950,21 +1217,25 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerUp(event: PointerEvent) {
-        const pointer = activePointer
+        if (pendingPointer?.pointerId === event.pointerId) {
+            stop()
+            return
+        }
 
-        if (!pointer || pointer.pointerId !== event.pointerId) {
+        const active = activePointer
+
+        if (!active || active.pointerId !== event.pointerId) {
             return
         }
 
         event.preventDefault()
 
-        const fromIndex = pointer.fromIndex
+        const fromIndex = active.fromIndex
         const toIndex = pointerOverReorderArea
             ? resolveTargetIndexFromInsertion(fromIndex, insertionIndex, options.getItemCount())
             : null
 
-        stop()
-        emitChange()
+        end()
 
         if (toIndex !== null && fromIndex !== toIndex) {
             options.onCommit(fromIndex, toIndex, 'pointer')
@@ -972,12 +1243,38 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     }
 
     function handleWindowPointerCancel(event: PointerEvent) {
-        if (activePointer?.pointerId !== event.pointerId) {
-            return
+        if (pendingPointer?.pointerId === event.pointerId) {
+            stop()
+        } else if (activePointer?.pointerId === event.pointerId) {
+            // A canceled pointer does not produce a click to suppress.
+            end(false)
+        }
+    }
+
+    /** Stop an active drag and report the idle state, keeping its click from activating whatever is under the pointer. */
+    function end(suppressFollowingClick = options.suppressClickAfterDrag ?? false) {
+        stop()
+
+        if (suppressFollowingClick) {
+            window.addEventListener('click', suppressClick, { capture: true })
+            window.addEventListener('pointerdown', releaseClick, { capture: true })
+            window.addEventListener('keydown', releaseClick, { capture: true })
         }
 
-        stop()
         emitChange()
+    }
+
+    function suppressClick(event: MouseEvent) {
+        event.preventDefault()
+        event.stopPropagation()
+        releaseClick()
+    }
+
+    // A new press or key is a fresh interaction, so a drag that produced no click never swallows a later one.
+    function releaseClick() {
+        window.removeEventListener('click', suppressClick, { capture: true })
+        window.removeEventListener('pointerdown', releaseClick, { capture: true })
+        window.removeEventListener('keydown', releaseClick, { capture: true })
     }
 
     function bindPointerCapture(element: HTMLElement, pointerId: number): HTMLElement | null {
@@ -997,29 +1294,59 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
     function pointerDown(index: number, event: PointerEvent) {
         const handle = findReorderHandle(event)
 
-        if (cleaned || !canReorder() || activePointer || event.button !== 0 || event.isPrimary === false || !handle) {
+        if (
+            cleaned ||
+            !canReorder() ||
+            !isValidIndex(index) ||
+            activePointer ||
+            pendingPointer ||
+            event.button !== 0 ||
+            event.isPrimary === false ||
+            !handle
+        ) {
             return
         }
 
-        options.onStart()
-        event.preventDefault()
-        const captureElement = bindPointerCapture(handle, event.pointerId)
-        activePointer = {
-            fromIndex: index,
-            pointerId: event.pointerId,
-            captureElement,
-            scrollElement: handle,
-        }
-        insertionIndex = index
-        pointerOverReorderArea = true
+        const origin = { clientX: event.clientX, clientY: event.clientY }
+        pointer = { origin, position: origin }
 
         // Keep the window listeners as a compatibility path for older browsers
         // and for synthetic tests that dispatch pointer events on window.
         window.addEventListener('pointermove', handleWindowPointerMove, { passive: false })
         window.addEventListener('pointerup', handleWindowPointerUp)
         window.addEventListener('pointercancel', handleWindowPointerCancel)
+        window.addEventListener('blur', cancel)
 
+        if (activationDistance > 0) {
+            pendingPointer = { fromIndex: index, pointerId: event.pointerId, handle }
+            return
+        }
+
+        activate(index, event, handle)
         emitChange()
+    }
+
+    /** Turn an accepted press into a drag: measure, claim the pointer, and stop native defaults. */
+    function activate(fromIndex: number, event: PointerEvent, handle: HTMLElement) {
+        options.onStart()
+        event.preventDefault()
+        const captureElement = bindPointerCapture(handle, event.pointerId)
+        activePointer = {
+            fromIndex,
+            pointerId: event.pointerId,
+            captureElement,
+            scrollElement: handle,
+        }
+        insertionIndex = fromIndex
+        pointerOverReorderArea = true
+    }
+
+    function cancel() {
+        if (activePointer) {
+            end()
+        } else if (pendingPointer) {
+            stop()
+        }
     }
 
     function cleanup() {
@@ -1029,13 +1356,16 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
         cleaned = true
         stop()
+        releaseClick()
         autoScroller?.cleanup()
     }
 
     return {
         pointerDown,
         getState: currentState,
+        getPointer: () => (activePointer ? pointer : null),
         isDragging: () => activePointer !== null,
+        cancel,
         cleanup,
     }
 }

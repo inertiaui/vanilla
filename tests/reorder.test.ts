@@ -1,4 +1,9 @@
-import { createReorderableList, REORDERABLE_LIST_HANDLE_ATTRIBUTE } from '../src/reorder'
+import {
+    createReorderableList,
+    REORDERABLE_LIST_HANDLE_ATTRIBUTE,
+    type ReorderBounds,
+    type ReorderPointer,
+} from '../src/reorder'
 
 function makeEvent(
     type: string,
@@ -386,9 +391,10 @@ describe('createReorderableList', () => {
         container.remove()
     })
 
-    it('auto-scrolls while pointer dragging', () => {
+    it.each(['custom containers', 'slotted handle'])('auto-scrolls while pointer dragging with %s', (scenario) => {
         let frame: FrameRequestCallback | null = null
         const container = document.createElement('div')
+        const host = document.createElement('div')
         const handle = document.createElement('button')
         let items = ['alpha', 'beta']
         const controller = createReorderableList({
@@ -396,11 +402,10 @@ describe('createReorderableList', () => {
             setItems: (nextItems) => {
                 items = nextItems
             },
-            autoScroll: {
-                getScrollContainers: () => [container],
-            },
+            autoScroll: scenario === 'slotted handle' ? { axis: 'y' } : { getScrollContainers: () => [container] },
         })
 
+        container.style.overflowY = 'auto'
         Object.defineProperties(container, {
             clientHeight: { value: 100, configurable: true },
             scrollHeight: { value: 300, configurable: true },
@@ -409,8 +414,18 @@ describe('createReorderableList', () => {
         })
         container.getBoundingClientRect = () => rect(0, 0, 100, 100)
         handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
-        container.append(handle)
-        document.body.append(container)
+        document.body.append(host)
+        if (scenario === 'slotted handle') {
+            const slot = document.createElement('slot')
+            host.attachShadow({ mode: 'open' }).append(container)
+            container.append(slot)
+            host.append(handle)
+            // Happy DOM does not assign slots; the browser suite covers native assignment.
+            Object.defineProperty(handle, 'assignedSlot', { value: slot })
+        } else {
+            host.append(container)
+            container.append(handle)
+        }
         for (const index of [0, 1]) {
             const row = document.createElement('div')
             row.getBoundingClientRect = () =>
@@ -428,18 +443,81 @@ describe('createReorderableList', () => {
             frame = null
         })
 
-        controller.pointerDown(
-            0,
-            makeEvent('pointerdown', [handle, container, document.body, document, window], container),
-        )
-        window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 98 }))
+        try {
+            controller.pointerDown(
+                0,
+                makeEvent('pointerdown', [handle, container, document.body, document, window], container),
+            )
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 50, clientY: 98 }))
 
-        frame?.(16)
+            frame?.(16)
 
-        expect(container.scrollTop).toBeGreaterThan(0)
+            expect(container.scrollTop).toBeGreaterThan(0)
+        } finally {
+            controller.cleanup()
+            host.remove()
+        }
+    })
 
-        controller.cleanup()
-        container.remove()
+    it('auto-scrolls right-to-left containers both ways', () => {
+        let frame: FrameRequestCallback | null = null
+        let scrollLeft = 0
+        const container = document.createElement('div')
+        const handle = document.createElement('button')
+        const controller = createReorderableList({
+            getItems: () => ['alpha', 'beta'],
+            autoScroll: { axis: 'x', getScrollContainers: () => [container] },
+        })
+
+        // Right-to-left content starts scrolled to the right edge at 0 and scrolls left into negative positions.
+        container.style.direction = 'rtl'
+        Object.defineProperties(container, {
+            clientWidth: { value: 100, configurable: true },
+            scrollWidth: { value: 300, configurable: true },
+            clientHeight: { value: 100, configurable: true },
+            scrollHeight: { value: 100, configurable: true },
+            scrollLeft: {
+                configurable: true,
+                get: () => scrollLeft,
+                set: (value: number) => (scrollLeft = Math.min(0, Math.max(-200, value))),
+            },
+        })
+        container.getBoundingClientRect = () => rect(0, 0, 100, 100)
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        container.append(handle)
+        document.body.append(container)
+        for (const index of [0, 1]) {
+            const cell = document.createElement('div')
+            cell.getBoundingClientRect = () => rect(50 - index * 50, 0, 100 - index * 50, 100)
+            container.append(cell)
+            controller.setItemElement(index, cell)
+        }
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+            frame = callback
+
+            return 1
+        })
+        vi.stubGlobal('cancelAnimationFrame', () => {
+            frame = null
+        })
+
+        try {
+            controller.pointerDown(
+                0,
+                makeEvent('pointerdown', [handle, container, document.body, document, window], container),
+            )
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 2, clientY: 50 }))
+            frame?.(16)
+            expect(scrollLeft).toBeLessThan(0)
+
+            scrollLeft = -200
+            window.dispatchEvent(makeEvent('pointermove', [window], window, { pointerId: 1, clientX: 98, clientY: 50 }))
+            frame?.(32)
+            expect(scrollLeft).toBeGreaterThan(-200)
+        } finally {
+            controller.cleanup()
+            container.remove()
+        }
     })
 
     it.each([
@@ -476,6 +554,54 @@ describe('createReorderableList', () => {
             })
         } finally {
             controller.cleanup()
+        }
+    })
+
+    it.each([
+        {
+            name: 'in index order',
+            rects: [rect(100, 0, 140, 40), rect(50, 0, 90, 40), rect(0, 0, 40, 40)],
+            moves: [
+                [130, 0, 0],
+                [110, 1, 0],
+                [60, 2, 1],
+                [10, 3, 2],
+            ],
+        },
+        {
+            name: 'out of index order',
+            rects: [rect(50, 0, 90, 40), rect(100, 0, 140, 40), rect(0, 0, 40, 40)],
+            moves: [
+                [130, 1, 0],
+                [110, 0, 0],
+                [60, 2, 1],
+                [10, 3, 2],
+            ],
+        },
+    ])('reads a right-to-left row in visual order from the right, $name', ({ rects, moves }) => {
+        const handle = document.createElement('button')
+        handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+        const list = document.createElement('div')
+        list.style.direction = 'rtl'
+        list.getBoundingClientRect = () => rect(0, 0, 140, 40)
+        document.body.append(list)
+        const onChange = vi.fn()
+        const controller = createReorderableList({ getItems: () => [0, 1, 2], onChange })
+        controller.setListElement(list)
+        rects.forEach((value, index) => {
+            const element = document.createElement('div')
+            element.getBoundingClientRect = () => value
+            controller.setItemElement(index, element)
+        })
+        try {
+            controller.pointerDown(0, makeEvent('pointerdown', [handle], handle, { clientX: 130, clientY: 20 }))
+            for (const [clientX, insertionIndex, targetIndex] of moves) {
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX, clientY: 20 }))
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex, targetIndex })
+            }
+        } finally {
+            controller.cleanup()
+            list.remove()
         }
     })
 
@@ -605,5 +731,396 @@ describe('createReorderableList', () => {
         } finally {
             controller.cleanup()
         }
+    })
+
+    describe('activation distance', () => {
+        function setup(options: Partial<Parameters<typeof createReorderableList<number>>[0]> = {}) {
+            const handle = document.createElement('button')
+            handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            handle.setPointerCapture = vi.fn()
+            document.body.append(handle)
+            let items = [0, 1, 2]
+            const onChange = vi.fn()
+            const onReorder = vi.fn()
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getBounds: () => ({ left: 0, top: -Infinity, right: 100, bottom: Infinity }),
+                activationDistance: 4,
+                onChange,
+                onReorder,
+                ...options,
+            })
+            for (let index = 0; index < 3; index++) {
+                const element = document.createElement('div')
+                element.getBoundingClientRect = () => rect(0, index * 50, 100, index * 50 + 40)
+                controller.setItemElement(index, element)
+            }
+            const press = (clientY = 20, index = 0) => {
+                const event = makeEvent('pointerdown', [handle, document.body, document, window], handle, {
+                    clientX: 50,
+                    clientY,
+                })
+                controller.pointerDown(index, event)
+
+                return event
+            }
+            const move = (clientY: number) =>
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX: 50, clientY }))
+            const release = (clientY: number) =>
+                window.dispatchEvent(makeEvent('pointerup', [window], window, { clientX: 50, clientY }))
+            const click = () => {
+                const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+                handle.dispatchEvent(event)
+
+                return event.defaultPrevented
+            }
+
+            return { handle, controller, onChange, onReorder, press, move, release, click, items: () => items }
+        }
+
+        it('leaves a press alone until the pointer travels the distance', () => {
+            const { handle, controller, onChange, press, move } = setup()
+            try {
+                expect(press().defaultPrevented).toBe(false)
+                move(22)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(handle.setPointerCapture).not.toHaveBeenCalled()
+                expect(controller.getPointer()).toBeNull()
+
+                move(80)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex: 2, targetIndex: 1 })
+                expect(handle.setPointerCapture).toHaveBeenCalledWith(1)
+                expect(controller.getPointer()).toEqual({
+                    origin: { clientX: 50, clientY: 20 },
+                    position: { clientX: 50, clientY: 80 },
+                })
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('discards a press released before the distance', () => {
+            const { handle, controller, onChange, onReorder, press, move, release, click } = setup()
+            try {
+                press()
+                release(21)
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(onReorder).not.toHaveBeenCalled()
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('cancels pending and active gestures without committing, and stays usable', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup()
+            try {
+                press()
+                controller.cancel()
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                controller.cancel()
+                expect(onChange).toHaveBeenLastCalledWith({
+                    draggedIndex: null,
+                    insertionIndex: null,
+                    targetIndex: null,
+                })
+                expect(controller.getPointer()).toBeNull()
+                release(80)
+                expect(onReorder).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                release(80)
+                expect(onReorder).toHaveBeenCalledWith(
+                    { item: 0, fromIndex: 0, toIndex: 1, source: 'pointer' },
+                    { alreadyPreviewed: true },
+                )
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('ends a gesture silently on cleanup', () => {
+            const { handle, controller, onChange, press, move } = setup()
+            press()
+            move(80)
+            onChange.mockClear()
+            controller.cleanup()
+            move(120)
+            expect(onChange).not.toHaveBeenCalled()
+            handle.remove()
+        })
+
+        it('ignores invalid source indexes before preventing native interaction', () => {
+            for (const activationDistance of [0, 4]) {
+                const { handle, controller, onChange, press, move, release } = setup({ activationDistance })
+                try {
+                    for (const index of [-1, 3, 0.5, NaN, Infinity]) {
+                        expect(press(20, index).defaultPrevented).toBe(false)
+                        move(80)
+                        release(80)
+                    }
+                    expect(onChange).not.toHaveBeenCalled()
+                    expect(handle.setPointerCapture).not.toHaveBeenCalled()
+                } finally {
+                    controller.cleanup()
+                    handle.remove()
+                }
+            }
+        })
+
+        it('rechecks the pending source index when items disappear before activation', () => {
+            let items = [0, 1, 2]
+            const { handle, controller, onChange, press, move } = setup({ getItems: () => items })
+            try {
+                press(120, 2)
+                items = [0, 1]
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+                expect(controller.getPointer()).toBeNull()
+                expect(handle.setPointerCapture).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                expect(controller.getPointer()).not.toBeNull()
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('ends pending and active gestures when the window loses focus', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup()
+            try {
+                press()
+                window.dispatchEvent(new Event('blur'))
+                move(80)
+                expect(onChange).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                window.dispatchEvent(new Event('blur'))
+                expect(controller.getPointer()).toBeNull()
+                expect(onChange).toHaveBeenLastCalledWith({
+                    draggedIndex: null,
+                    insertionIndex: null,
+                    targetIndex: null,
+                })
+                release(80)
+                expect(onReorder).not.toHaveBeenCalled()
+
+                press()
+                move(80)
+                release(80)
+                expect(onReorder).toHaveBeenCalledOnce()
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('does not suppress an unrelated click after the browser cancels a pointer', () => {
+            const { handle, controller, press, move, click } = setup({ suppressClickAfterDrag: true })
+            try {
+                press()
+                move(80)
+                window.dispatchEvent(makeEvent('pointercancel', [window], window))
+                expect(controller.getPointer()).toBeNull()
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('suppresses only the click that follows a drag', () => {
+            const { handle, controller, press, move, release, click } = setup({ suppressClickAfterDrag: true })
+            try {
+                press()
+                release(20)
+                expect(click()).toBe(false)
+
+                press()
+                move(80)
+                release(80)
+                expect(click()).toBe(true)
+                expect(click()).toBe(false)
+
+                press()
+                move(80)
+                controller.cancel()
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+                expect(click()).toBe(false)
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('keeps activating on press by default', () => {
+            const { handle, controller, onChange, press } = setup({ activationDistance: undefined })
+            try {
+                expect(press().defaultPrevented).toBe(true)
+                expect(handle.setPointerCapture).toHaveBeenCalledWith(1)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 0, insertionIndex: 0, targetIndex: 0 })
+                expect(controller.getPointer()).toEqual({
+                    origin: { clientX: 50, clientY: 20 },
+                    position: { clientX: 50, clientY: 20 },
+                })
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+    })
+
+    describe('collision point', () => {
+        // A row with a wide middle item between two narrow ones: 0 [0, 100], 1 [100, 400], 2 [400, 500].
+        const boxes = [rect(0, 0, 100, 40), rect(100, 0, 400, 40), rect(400, 0, 500, 40)]
+        const leadingEdge = ({ origin, position }: ReorderPointer, item: ReorderBounds) => {
+            const offset = position.clientX - origin.clientX
+
+            return { clientX: (offset > 0 ? item.right : item.left) + offset, clientY: position.clientY }
+        }
+
+        function setup(options: Partial<Parameters<typeof createReorderableList<number>>[0]> = {}) {
+            const handle = document.createElement('button')
+            handle.setAttribute(REORDERABLE_LIST_HANDLE_ATTRIBUTE, 'true')
+            handle.setPointerCapture = vi.fn()
+            document.body.append(handle)
+            let items = [0, 1, 2]
+            const onChange = vi.fn()
+            const onReorder = vi.fn()
+            const controller = createReorderableList({
+                getItems: () => items,
+                setItems: (nextItems) => {
+                    items = nextItems
+                },
+                getBounds: () => rect(0, 0, 500, 40),
+                activationDistance: 4,
+                onChange,
+                onReorder,
+                ...options,
+            })
+            boxes.forEach((box, index) => {
+                const element = document.createElement('div')
+                element.getBoundingClientRect = () => box
+                controller.setItemElement(index, element)
+            })
+            // Grab the wide item near its start.
+            const press = () =>
+                controller.pointerDown(
+                    1,
+                    makeEvent('pointerdown', [handle, document.body, document, window], handle, {
+                        clientX: 120,
+                        clientY: 20,
+                    }),
+                )
+            const move = (clientX: number, clientY = 20) =>
+                window.dispatchEvent(makeEvent('pointermove', [window], window, { clientX, clientY }))
+            const release = (clientX: number, clientY = 20) =>
+                window.dispatchEvent(makeEvent('pointerup', [window], window, { clientX, clientY }))
+
+            return { handle, controller, onChange, onReorder, press, move, release, items: () => items }
+        }
+
+        it('picks the slot from the pointer by default and when the point is null', () => {
+            for (const getCollisionPoint of [undefined, () => null]) {
+                const { handle, controller, onReorder, press, move, release } = setup({ getCollisionPoint })
+                try {
+                    // The wide item now covers its narrow neighbor, but the pointer is short of that neighbor's midpoint.
+                    press()
+                    move(220)
+                    release(220)
+                    expect(onReorder).not.toHaveBeenCalled()
+
+                    press()
+                    move(460)
+                    release(460)
+                    expect(onReorder).toHaveBeenCalledWith(
+                        { item: 1, fromIndex: 1, toIndex: 2, source: 'pointer' },
+                        { alreadyPreviewed: true },
+                    )
+                } finally {
+                    controller.cleanup()
+                    handle.remove()
+                }
+            }
+        })
+
+        it('picks the slot from the given point, including a drop on the activating move', () => {
+            const getCollisionPoint = vi.fn(leadingEdge)
+            const { handle, controller, onChange, press, move, release, items } = setup({ getCollisionPoint })
+            try {
+                press()
+                move(220)
+                expect(getCollisionPoint).toHaveBeenLastCalledWith(
+                    { origin: { clientX: 120, clientY: 20 }, position: { clientX: 220, clientY: 20 } },
+                    expect.objectContaining({ left: 100, top: 0, right: 400, bottom: 40 }),
+                )
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+                release(220)
+                expect(items()).toEqual([0, 2, 1])
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('follows the given point back across the start and toward the other side', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup({
+                getCollisionPoint: leadingEdge,
+            })
+            try {
+                press()
+                move(220)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+                // The leading edge is back short of the next item's midpoint.
+                move(160)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 2, targetIndex: 1 })
+                // The leading edge has crossed the previous item's midpoint.
+                move(60)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 0, targetIndex: 0 })
+                release(60)
+                expect(onReorder).toHaveBeenCalledWith(
+                    { item: 1, fromIndex: 1, toIndex: 0, source: 'pointer' },
+                    { alreadyPreviewed: true },
+                )
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
+
+        it('keeps the point within the items, while the pointer still decides between dropping and canceling', () => {
+            const { handle, controller, onChange, onReorder, press, move, release } = setup({
+                getCollisionPoint: leadingEdge,
+            })
+            try {
+                // The leading edge has passed the end of the list.
+                press()
+                move(380)
+                expect(onChange).toHaveBeenLastCalledWith({ draggedIndex: 1, insertionIndex: 3, targetIndex: 2 })
+
+                // Leaving the list with the pointer cancels, although the clamped point stays inside.
+                move(380, 120)
+                release(380, 120)
+                expect(onReorder).not.toHaveBeenCalled()
+            } finally {
+                controller.cleanup()
+                handle.remove()
+            }
+        })
     })
 })

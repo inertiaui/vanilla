@@ -42,14 +42,17 @@ for (const fallback of [false, true]) {
             await expect(page.locator('#state')).toHaveText('false')
         })
 
-        for (const [direction, width] of [
-            ['ltr', 1280],
-            ['rtl', 1280],
-            ['rtl', 390],
+        for (const [direction, width, scope] of [
+            ['ltr', 1280, 'dialog'],
+            ['rtl', 1280, 'dialog'],
+            ['rtl', 390, 'dialog'],
+            ['rtl', 1280, 'document'],
         ] as const) {
-            test(`inherits its theme and follows scrolling in ${direction} at ${width}px`, async ({ page }) => {
+            test(`inherits its theme and follows scrolling in ${direction} at ${width}px set on the ${scope}`, async ({
+                page,
+            }) => {
                 await page.setViewportSize({ width, height: 800 })
-                await page.locator('dialog').evaluate((element, dir) => {
+                await page.locator(scope === 'dialog' ? 'dialog' : 'html').evaluate((element, dir) => {
                     element.dir = dir
                 }, direction)
                 await page.click('#reference')
@@ -167,4 +170,43 @@ test('syncs native light dismissal with one close callback', async ({ page }) =>
         cleanups: 1,
         events: ['closed'],
     })
+})
+
+test.describe('panel rendered outside its reference', () => {
+    for (const [fallback, panelDir] of [
+        [false, null],
+        [true, null],
+        [true, 'ltr'],
+    ] as const) {
+        test(`follows the reference's direction unless it sets its own (${fallback ? 'fallback' : 'native'}, ${panelDir ?? 'no dir'})`, async ({
+            page,
+        }) => {
+            await page.goto(
+                `/e2e/pages/popover.html?portal${fallback ? '&fallback' : ''}${panelDir ? `&panel-dir=${panelDir}` : ''}`,
+            )
+            await page.click('#open-dialog')
+            await page.locator('dialog').evaluate((element) => {
+                element.dir = 'rtl'
+            })
+            await page.click('#reference')
+            await expect(page.locator('#panel')).toBeVisible()
+
+            const result = await page.evaluate(() => {
+                const panel = document.querySelector<HTMLElement>('#panel')!
+                const box = panel.getBoundingClientRect()
+                const reference = document.querySelector('#reference')!.getBoundingClientRect()
+
+                return {
+                    dir: panel.getAttribute('dir'),
+                    direction: getComputedStyle(panel).direction,
+                    alignedRight: Math.abs(box.right - reference.right) < 2,
+                }
+            })
+            expect(result).toEqual(
+                panelDir
+                    ? { dir: 'ltr', direction: 'ltr', alignedRight: true }
+                    : { dir: 'rtl', direction: 'rtl', alignedRight: true },
+            )
+        })
+    }
 })

@@ -4,6 +4,11 @@ function isRtl(): boolean {
     return typeof document !== 'undefined' && document.documentElement.dir === 'rtl'
 }
 
+/** Whether `start` and `end` placements around the reference run from the right, following its writing direction. */
+export function isRightToLeft(reference: Element): boolean {
+    return getComputedStyle(reference).direction === 'rtl'
+}
+
 function getOppositePlacement(placement: Placement): Placement {
     const map: Record<string, Placement> = {
         top: 'bottom',
@@ -171,12 +176,12 @@ export function computePositionFromRect(
     floatingRect: DOMRect,
     placement: Placement,
     offset: number,
+    rtl = isRtl(),
 ): { x: number; y: number } {
     let x = 0
     let y = 0
 
     const [side, alignment] = placement.split('-') as [string, string | undefined]
-    const rtl = isRtl()
 
     // Calculate position based on side
     switch (side) {
@@ -266,13 +271,14 @@ export function computeWithFallback(
     const refRect = referenceRect ?? reference.getBoundingClientRect()
     const floatingRect = floating.getBoundingClientRect()
 
-    let { x, y } = computePositionFromRect(refRect, floatingRect, placement, offset)
+    const rtl = isRightToLeft(reference)
+    let { x, y } = computePositionFromRect(refRect, floatingRect, placement, offset, rtl)
     let actualPlacement = placement
 
     // Flip to opposite side if overflowing
     if (flip && wouldOverflow(x, y, floatingRect, placement)) {
         const flipped = getOppositePlacement(placement)
-        const flippedPos = computePositionFromRect(refRect, floatingRect, flipped, offset)
+        const flippedPos = computePositionFromRect(refRect, floatingRect, flipped, offset, rtl)
 
         if (!wouldOverflow(flippedPos.x, flippedPos.y, floatingRect, flipped)) {
             x = flippedPos.x

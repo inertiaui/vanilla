@@ -80,7 +80,8 @@
                         panel.innerHTML = menu
                             ? '<button role="menuitem" id="first">First</button><button role="menuitem" disabled>Disabled</button><button role="menuitem" id="last">Last</button>'
                             : '<input aria-label="Search" />'
-                        container.append(panel)
+                        if (params.has('panel-dir')) panel.dir = params.get('panel-dir')
+                        ;(params.has('portal') ? document.body : container).append(panel)
                         controller.mount()
                     })
                 },
