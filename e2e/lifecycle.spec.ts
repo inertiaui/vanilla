@@ -34,6 +34,31 @@ for (const fallback of [false, true]) {
             await expect(page.getByRole('tooltip')).toHaveCount(0)
             await expect(page.locator('#trigger')).toBeFocused()
         })
+        test('positions a constrained tooltip beside its trigger at either viewport edge', async ({ page }) => {
+            for (const left of ['400px', 'calc(100vw - 140px)', '0px']) {
+                await page.locator('#trigger').evaluate((element, left) => {
+                    Object.assign(element.style, { position: 'fixed', top: '280px', left, margin: '0' })
+                }, left)
+                await page.locator('#trigger').focus()
+                const tooltip = page.getByRole('tooltip')
+                await expect(tooltip).toBeVisible()
+                await expect
+                    .poll(async () => {
+                        const reference = (await page.locator('#trigger').boundingBox())!
+                        const panel = (await tooltip.boundingBox())!
+                        const centered = reference.x + reference.width / 2 - panel.width / 2
+                        const expected = Math.max(4, Math.min(page.viewportSize()!.width - panel.width - 4, centered))
+                        return (
+                            Math.abs(panel.x - expected) < 2 &&
+                            Math.abs(reference.y - panel.y - panel.height - 6) < 2 &&
+                            panel.width <= 180
+                        )
+                    })
+                    .toBe(true)
+                await page.locator('#outside').focus()
+                await expect(tooltip).toHaveCount(0)
+            }
+        })
         test('cancels stale hiding when the tooltip is requested again', async ({ page }) => {
             await page.locator('#trigger').focus()
             await expect(page.getByRole('tooltip')).toBeVisible()

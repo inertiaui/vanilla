@@ -643,6 +643,7 @@ The function applies positioning styles to the floating element automatically (`
 | `offset` | `number` | `0` | Distance in pixels between reference and floating element |
 | `flip` | `boolean` | `true` | Flip to opposite side when overflowing viewport |
 | `autoSize` | `boolean` | `false` | Constrain the floating element to the available viewport space (sets `max-height` and `overflow-y: auto`) |
+| `anchorPositioning` | `boolean` | `true` | Use CSS anchors when supported. Set to `false` to use numeric positioning. |
 
 #### Placements
 

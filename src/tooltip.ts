@@ -108,9 +108,15 @@ export function createTooltipController(options: TooltipControllerOptions): Tool
         mounted = tooltip
         cleanups.push(followReferenceDirection(reference, tooltip))
         if (native) tooltip.showPopover()
-        // Preserve the consumer's CSS width limits while sharing positioning and viewport listeners.
+        // Numeric positioning keeps centered tooltips beside the trigger at viewport edges
+        // and preserves the consumer's CSS width limits.
         const updatePosition = () =>
-            computePosition(reference, tooltip, { placement: 'top', offset: 6, ...options.position })
+            computePosition(reference, tooltip, {
+                placement: 'top',
+                offset: 6,
+                anchorPositioning: false,
+                ...options.position,
+            })
         updatePosition()
         cleanups.push(autoUpdateTopLayerPopover(reference, tooltip, updatePosition))
         const release = options.onMount?.({ reference, popover: tooltip, native })

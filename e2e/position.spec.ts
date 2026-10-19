@@ -829,3 +829,52 @@ for (const path of ['computePosition', 'top layer with anchors', 'top layer with
         })
     })
 }
+
+test('switches between CSS anchors and numeric positioning without retaining old styles', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { computePosition } = await import(modulePath)
+        const reference = document.createElement('button')
+        const floating = document.createElement('div')
+        reference.style.cssText = 'position:fixed;left:400px;top:300px;width:100px;height:30px'
+        floating.style.cssText = 'width:160px;height:40px;margin:0;padding:0;border:0'
+        document.body.append(reference, floating)
+        computePosition(reference, floating, { placement: 'top' })
+        computePosition(reference, floating, { placement: 'top', anchorPositioning: false })
+        const numeric = floating.getBoundingClientRect().toJSON()
+        computePosition(reference, floating, { placement: 'top-start' })
+        const anchored = floating.getBoundingClientRect().toJSON()
+        reference.remove()
+        floating.remove()
+        return { numeric, anchored }
+    })
+    expect(result.numeric.x).toBeCloseTo(370, 0)
+    expect(result.numeric.y).toBeCloseTo(260, 0)
+    expect(result.anchored.x).toBeCloseTo(400, 0)
+    expect(result.anchored.y).toBeCloseTo(260, 0)
+})
+
+test('keeps numeric positioning stable while the floating element scales', async ({ page }) => {
+    const positions = await page.evaluate(async () => {
+        const modulePath = '/src/index.ts'
+        const { computePosition } = await import(modulePath)
+        const reference = document.createElement('button')
+        const floating = document.createElement('div')
+        reference.style.cssText = 'position:fixed;left:400px;top:300px;width:100px;height:30px'
+        floating.style.cssText = 'width:164px;height:28px;margin:0;padding:0;border:0'
+        document.body.append(reference, floating)
+        const positions = [1, 0.95, 0.98, 1].map((scale) => {
+            floating.style.transform = `scale(${scale})`
+            computePosition(reference, floating, { placement: 'top', offset: 6, anchorPositioning: false })
+            const rect = floating.getBoundingClientRect()
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        })
+        reference.remove()
+        floating.remove()
+        return positions
+    })
+    for (const position of positions) {
+        expect(position.x).toBeCloseTo(450, 1)
+        expect(position.y).toBeCloseTo(280, 1)
+    }
+})

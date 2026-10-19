@@ -22,6 +22,8 @@ export interface PositionOptions {
      * applied via its `anchor` prop, so long menus scroll instead of overflowing.
      */
     autoSize?: boolean
+    /** Use CSS anchors when supported. Set false to use numeric positioning. */
+    anchorPositioning?: boolean
 }
 
 export interface TopLayerPopoverPositionOptions {

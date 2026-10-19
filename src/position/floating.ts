@@ -58,12 +58,13 @@ export function computePosition(
     floating: HTMLElement,
     options: PositionOptions = {},
 ): PositionResult {
-    const { placement = 'bottom-start', offset = 0, flip = true, autoSize = false } = options
+    const { placement = 'bottom-start', offset = 0, flip = true, autoSize = false, anchorPositioning = true } = options
 
-    if (supportsAnchorPositioning() && (!flip || supportsAnchorFlip())) {
+    if (anchorPositioning && supportsAnchorPositioning() && (!flip || supportsAnchorFlip())) {
         // CSS handles the positioning — just set it up and return current coords
         const existingClass = findAnchorClass(floating)
         if (!existingClass) {
+            floating.style.removeProperty('inset')
             setupAnchorPositioning(reference, floating, placement, offset, flip)
         }
         if (autoSize) {
@@ -72,6 +73,9 @@ export function computePosition(
         const rect = floating.getBoundingClientRect()
         return { x: rect.left, y: rect.top, placement }
     }
+
+    const anchorClass = findAnchorClass(floating)
+    if (anchorClass) cleanupAnchorPositioning(reference, floating, anchorClass)
 
     // JS fallback. Pre-size with the requested side so a tall element is already
     // capped before positioning, avoiding a first-frame clamp to the viewport edge.
@@ -82,6 +86,8 @@ export function computePosition(
     }
     const result = computeWithFallback(reference, floating, { placement, offset, flip }, referenceRect)
     floating.style.position = 'fixed'
+    // Native popovers default to inset: 0. Only the computed edges should position them.
+    floating.style.inset = 'auto'
     floating.style.top = `${result.y}px`
     floating.style.left = `${result.x}px`
     if (autoSize) {
