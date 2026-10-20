@@ -62,8 +62,6 @@ interface AutoScrollerController {
     stop: CleanupFunction
     /** Stop permanently and cancel all pending work. Idempotent. */
     cleanup: CleanupFunction
-    /** True when an auto-scroll animation frame is pending. */
-    isScrolling: () => boolean
 }
 
 interface ReorderInsertionOptions {
@@ -562,6 +560,47 @@ function getScrollPosition(container: AutoScrollContainer, axis: 'x' | 'y'): num
     return axis === 'x' ? container.scrollLeft : container.scrollTop
 }
 
+/** Keep initial geometry independent of preview transforms, translating only ancestor scroll displacement. */
+function createScrollAdjustedHitBox(hitBox: ReorderHitBox, element: HTMLElement): () => ReorderHitBox {
+    const containers: Element[] = []
+    const ownerWindow = getOwnerWindow(element)
+    const scrollElement = ownerWindow ? getScrollElement(ownerWindow) : null
+    const windowLeft = ownerWindow?.scrollX ?? 0
+    const windowTop = ownerWindow?.scrollY ?? 0
+    let node: Node | null = element
+
+    while ((node = getParentNodeAcrossShadowDom(node))) {
+        // Include programmatically scrollable ancestors (such as overflow:hidden), but count window scroll once.
+        if (node instanceof Element && node !== scrollElement) {
+            containers.push(node)
+        }
+    }
+
+    const positions = containers.map((container) => ({
+        container,
+        left: container.scrollLeft,
+        top: container.scrollTop,
+    }))
+
+    return () => {
+        let left = (ownerWindow?.scrollX ?? 0) - windowLeft
+        let top = (ownerWindow?.scrollY ?? 0) - windowTop
+
+        for (const position of positions) {
+            left += position.container.scrollLeft - position.left
+            top += position.container.scrollTop - position.top
+        }
+
+        return {
+            index: hitBox.index,
+            left: hitBox.left - left,
+            top: hitBox.top - top,
+            right: hitBox.right - left,
+            bottom: hitBox.bottom - top,
+        }
+    }
+}
+
 function getMaxScrollPosition(container: AutoScrollContainer, axis: 'x' | 'y'): number {
     if (isWindowContainer(container)) {
         const scrollElement = getScrollElement(container)
@@ -784,7 +823,6 @@ function createAutoScroller(options: AutoScrollerOptions = {}): AutoScrollerCont
         update,
         stop,
         cleanup,
-        isScrolling: () => frameId !== null,
     }
 }
 
@@ -795,8 +833,7 @@ interface PointerReorderOptions {
     isRightToLeft?: () => boolean
     /**
      * Return the current hit boxes for every reorderable item. Called on each
-     * pointer move and auto-scroll frame so callers can measure fresh
-     * `getBoundingClientRect()` values.
+     * pointer move and auto-scroll frame to account for scroll displacement.
      */
     getHitBoxes: () => ReorderHitBox[]
     /** Optional outer collision bounds for list chrome around the item boxes. */
@@ -828,12 +865,8 @@ interface PointerReorderController {
      * whose composed path contains an element carrying the handle attribute.
      */
     pointerDown: (index: number, event: PointerEvent) => void
-    /** Current interaction state. */
-    getState: () => PointerReorderState
     /** Pointer positions of the active drag. */
     getPointer: () => ReorderPointer | null
-    /** True while a pointer drag is active. */
-    isDragging: () => boolean
     /** End a pending press or active drag without committing it. */
     cancel: () => void
     /** Cancel any active drag and remove all window listeners. Idempotent. */
@@ -867,6 +900,10 @@ function getRegisteredItemElements(itemElements: Map<number, HTMLElement>): HTML
         .map(([, element]) => element)
 }
 
+function isValidReorderIndex(index: number, itemCount: number): boolean {
+    return Number.isInteger(index) && index >= 0 && index < itemCount
+}
+
 /**
  * Framework-neutral list reorder controller. It combines item registration,
  * live pointer preview ordering, keyboard moves, pointer commits, bounds, and
@@ -876,7 +913,7 @@ function getRegisteredItemElements(itemElements: Map<number, HTMLElement>): HTML
 export function createReorderableList<T>(options: ReorderableListOptions<T>): ReorderableListController<T> {
     let listElement: HTMLElement | null = null
     let pointerState: ReorderableListState = idleState
-    let dragHitBoxes: ReorderHitBox[] | null = null
+    let dragHitBoxes: Array<() => ReorderHitBox> | null = null
     let dragRightToLeft = false
     let lastPreviewedPointerTargetIndex: number | null = null
     const itemElements = new Map<number, HTMLElement>()
@@ -908,7 +945,7 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
             .filter((hitBox): hitBox is ReorderHitBox => hitBox !== null)
     }
 
-    const getHitBoxes = () => dragHitBoxes ?? measureItemHitBoxes()
+    const getHitBoxes = () => dragHitBoxes?.map((getHitBox) => getHitBox()) ?? measureItemHitBoxes()
 
     const commitReorder = (
         fromIndex: number,
@@ -921,10 +958,8 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
         if (
             !canReorder() ||
             fromIndex === toIndex ||
-            fromIndex < 0 ||
-            toIndex < 0 ||
-            fromIndex >= items.length ||
-            toIndex >= items.length
+            !isValidReorderIndex(fromIndex, items.length) ||
+            !isValidReorderIndex(toIndex, items.length)
         ) {
             return null
         }
@@ -945,7 +980,9 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
 
     const pointerReorder = createPointerReorder({
         onStart: () => {
-            dragHitBoxes = measureItemHitBoxes()
+            dragHitBoxes = measureItemHitBoxes().map((hitBox) =>
+                createScrollAdjustedHitBox(hitBox, itemElements.get(hitBox.index)!),
+            )
             // Rows follow the list's writing direction, read once per drag.
             const element = listElement ?? itemElements.values().next().value
             dragRightToLeft = !!element && getComputedStyle(element).direction === 'rtl'
@@ -1039,12 +1076,12 @@ export function createReorderableList<T>(options: ReorderableListOptions<T>): Re
  */
 function createPointerReorder(options: PointerReorderOptions): PointerReorderController {
     const canReorder = () => (options.canReorder?.() ?? true) && options.getItemCount() > 1
-    const isValidIndex = (index: number) => Number.isInteger(index) && index >= 0 && index < options.getItemCount()
     let activePointer: {
         fromIndex: number
         pointerId: number
         captureElement: HTMLElement | null
         scrollElement: HTMLElement | null
+        initialItemBounds: ReorderBounds | null
     } | null = null
     // A press that has not yet travelled the activation distance.
     let pendingPointer: {
@@ -1125,8 +1162,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
             return null
         }
 
-        const fromIndex = activePointer.fromIndex
-        const item = hitBoxes.find((hitBox) => hitBox.index === fromIndex)
+        const item = activePointer.initialItemBounds
         const point = item ? getCollisionPoint(pointer, item) : null
 
         if (!point || !Number.isFinite(point.clientX) || !Number.isFinite(point.clientY)) {
@@ -1199,7 +1235,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
             pendingPointer = null
 
-            if (!canReorder() || !isValidIndex(pending.fromIndex)) {
+            if (!canReorder() || !isValidReorderIndex(pending.fromIndex, options.getItemCount())) {
                 stop()
                 return
             }
@@ -1297,7 +1333,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
         if (
             cleaned ||
             !canReorder() ||
-            !isValidIndex(index) ||
+            !isValidReorderIndex(index, options.getItemCount()) ||
             activePointer ||
             pendingPointer ||
             event.button !== 0 ||
@@ -1336,6 +1372,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
             pointerId: event.pointerId,
             captureElement,
             scrollElement: handle,
+            initialItemBounds: options.getHitBoxes().find((hitBox) => hitBox.index === fromIndex) ?? null,
         }
         insertionIndex = fromIndex
         pointerOverReorderArea = true
@@ -1362,9 +1399,7 @@ function createPointerReorder(options: PointerReorderOptions): PointerReorderCon
 
     return {
         pointerDown,
-        getState: currentState,
         getPointer: () => (activePointer ? pointer : null),
-        isDragging: () => activePointer !== null,
         cancel,
         cleanup,
     }

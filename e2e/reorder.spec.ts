@@ -163,10 +163,60 @@ test.describe('pointer reorder', () => {
         await expect
             .poll(async () => Number(await page.locator('#auto-scroll-frames').textContent()))
             .toBeGreaterThan(0)
+        await expect.poll(() => box.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(1)
 
         await page.mouse.up()
         await expect(page.locator('#auto-scroll-dragging')).toHaveText('no')
+        await expect(page.locator('#auto-scroll-list .reorder-item span:last-child')).toHaveText([
+            'Bravo',
+            'Charlie',
+            'Delta',
+            'Echo',
+            'Foxtrot',
+            'Golf',
+            'Hotel',
+            'Alpha',
+        ])
+        await expect(page.locator('#auto-scroll-measures')).toHaveText('8')
     })
+
+    for (const direction of ['ltr', 'rtl']) {
+        test(`commits the scrolled horizontal target in ${direction}`, async ({ page }) => {
+            await page.addStyleTag({
+                content: `
+                    #auto-scroll-box { width: 100px; height: 100px; direction: ${direction}; }
+                    #auto-scroll-list { flex-direction: row; gap: 0; padding: 0; width: 400px; max-width: none; min-height: 0; }
+                    #auto-scroll-list .reorder-item { flex: 0 0 50px; min-width: 0; height: 100px; padding: 0; border: 0; }
+                    #auto-scroll-list .reorder-item span:last-child { display: none; }
+                `,
+            })
+            const handle = page.locator('#auto-handle-0')
+            const box = page.locator('#auto-scroll-box')
+            await handle.scrollIntoViewIfNeeded()
+            const handleBox = (await handle.boundingBox())!
+            const boxBox = (await box.boundingBox())!
+
+            await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+            await page.mouse.down()
+            const scrollLeft = direction === 'rtl' ? -110 : 110
+            await box.evaluate((el, value) => (el.scrollLeft = value), scrollLeft)
+            expect(await box.evaluate((el) => el.scrollLeft)).toBe(scrollLeft)
+            await page.mouse.move(boxBox.x + 1 + (direction === 'rtl' ? 2 : 98), boxBox.y + 51)
+            await page.mouse.up()
+
+            await expect(page.locator('#auto-scroll-list .reorder-item span:last-child')).toHaveText([
+                'Bravo',
+                'Charlie',
+                'Delta',
+                'Alpha',
+                'Echo',
+                'Foxtrot',
+                'Golf',
+                'Hotel',
+            ])
+            await expect(page.locator('#auto-scroll-measures')).toHaveText('8')
+        })
+    }
 })
 
 test.describe('activation distance', () => {

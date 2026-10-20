@@ -50,6 +50,32 @@ describe.each([only, except])('%s filtering', (filter) => {
         expect(filter({ name: 1 }, [])).toEqual(include ? {} : { name: 1 })
     })
 
+    it('copies only own enumerable string keys', () => {
+        const input = Object.assign(Object.create({ inherited: 1 }), { Name: 2, other: 3 })
+        Object.defineProperty(input, 'hidden', { value: 4 })
+        input[Symbol('name')] = 5
+
+        const result = filter(input, ['name', 'inherited', 'hidden'], true)
+        expect(result).toEqual(include ? { Name: 2 } : { other: 3 })
+        expect(Reflect.ownKeys(result)).toEqual(include ? ['Name'] : ['other'])
+        expect(Object.getPrototypeOf(result)).toBe(Object.prototype)
+    })
+
+    it('returns fresh shallow copies when every entry is retained', () => {
+        const value = { nested: true }
+        const input = { Name: value }
+        const array = ['Name', 'Name']
+        const keys = include ? ['name'] : []
+        const result = filter(input, keys, true)
+        const arrayResult = filter(array, keys, true)
+
+        expect(result).toEqual(input)
+        expect(result).not.toBe(input)
+        expect(result.Name).toBe(value)
+        expect(arrayResult).toEqual(array)
+        expect(arrayResult).not.toBe(array)
+    })
+
     it('does not rescan the key list for every input property', () => {
         let keyReads = 0
         const keys = new Proxy(

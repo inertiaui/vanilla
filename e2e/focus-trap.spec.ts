@@ -1,5 +1,47 @@
 import { test, expect } from './test'
 
+for (const tail of [0, 80]) {
+    test(`hidden inputs are skipped for focus and keyboard boundaries with ${tail} decorative nodes`, async ({
+        page,
+    }) => {
+        await page.evaluate(async (tail) => {
+            const modulePath = '/src/index.ts'
+            const { createFocusTrap } = await import(modulePath)
+            const container = document.createElement('div')
+            container.innerHTML =
+                '<input type="hidden"><input type="HIDDEN" tabindex="0">' +
+                '<button id="hidden-trap-first">First</button><button id="hidden-trap-last">Last</button>' +
+                '<input type="hidden"><input type="HIDDEN" tabindex="0">' +
+                '<span>Decoration</span>'.repeat(tail)
+            document.body.append(container)
+            ;(window as any).releaseHiddenInputTrap = createFocusTrap(container, { returnFocus: false })
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        }, tail)
+        try {
+            const first = page.locator('#hidden-trap-first')
+            const last = page.locator('#hidden-trap-last')
+            await expect.soft(first).toBeFocused()
+
+            await last.focus()
+            await page.keyboard.press('Tab')
+            await expect.soft(first).toBeFocused()
+
+            await first.focus()
+            await page.keyboard.press('Shift+Tab')
+            await expect.soft(last).toBeFocused()
+
+            await page.locator('#outside-btn').focus()
+            await expect.soft(first).toBeFocused()
+
+            await last.focus()
+            await last.evaluate((element: HTMLElement) => element.blur())
+            await expect.soft(first).toBeFocused()
+        } finally {
+            await page.evaluate(() => (window as any).releaseHiddenInputTrap())
+        }
+    })
+}
+
 test.describe('createFocusTrap', () => {
     test('auto-focuses first focusable element on open', async ({ page }) => {
         await page.click('#open-dialog-btn')

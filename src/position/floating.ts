@@ -62,11 +62,7 @@ export function computePosition(
 
     if (anchorPositioning && supportsAnchorPositioning() && (!flip || supportsAnchorFlip())) {
         // CSS handles the positioning — just set it up and return current coords
-        const existingClass = findAnchorClass(floating)
-        if (!existingClass) {
-            floating.style.removeProperty('inset')
-            setupAnchorPositioning(reference, floating, placement, offset, flip)
-        }
+        setupAnchorPositioning(reference, floating, placement, offset, flip)
         if (autoSize) {
             applySize(reference, floating, offset)
         }

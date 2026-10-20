@@ -34,6 +34,32 @@ describe('hexToHsl / hslToHex (existing compatibility)', () => {
         expect(hslToHex(120, 100, 50)).toBe('#00ff00')
         expect(hslToHex(240, 100, 50)).toBe('#0000ff')
     })
+
+    it.each([
+        [360, '#ff0000'],
+        [720, '#ff0000'],
+        [-360, '#ff0000'],
+        [420, '#ffff00'],
+        [-60, '#ff00ff'],
+    ])('wraps hue %s before conversion', (h, expected) => {
+        expect(hslToHex(h, 100, 50)).toBe(expected)
+    })
+
+    it('converts rounded hexToHsl hue at the end of the hue cycle', () => {
+        const { h, s, l } = hexToHsl('#ff0001')
+        expect({ h, s, l }).toEqual({ h: 360, s: 100, l: 50 })
+        expect(hslToHex(h, s, l)).toBe('#ff0000')
+    })
+
+    it.each([
+        [0.5, '#ff0200'],
+        [359.5, '#ff0002'],
+        [360.5, '#ff0200'],
+        [720.5, '#ff0200'],
+        [-0.5, '#ff0002'],
+    ])('preserves fractional hue %s when wrapping', (h, expected) => {
+        expect(hslToHex(h, 100, 50)).toBe(expected)
+    })
 })
 
 describe('normalize helpers', () => {
@@ -151,6 +177,25 @@ describe('parseHexColor', () => {
 })
 
 describe('parseRgbChannel', () => {
+    it.each([
+        ['+.5', 1],
+        ['000.5', 1],
+        [' +12.5 ', 13],
+        [' +.5% ', 1],
+        ['12.5%', 32],
+        ['-0', 0],
+        ['0%', 0],
+    ])('preserves valid decimal and percentage token %s', (token, expected) => {
+        expect(parseRgbChannel(token)).toBe(expected)
+    })
+
+    it.each(['12px', '0.5junk', '50junk%', '50%%', '50%junk', '50 %', '0.5.2', '1.', '1e2', '0x10', '+ 1'])(
+        'rejects partial numeric token %s',
+        (token) => {
+            expect(parseRgbChannel(token)).toBeNull()
+        },
+    )
+
     it('parses numeric and percentage channels', () => {
         expect(parseRgbChannel('128')).toBe(128)
         expect(parseRgbChannel(' 255 ')).toBe(255)
@@ -163,6 +208,10 @@ describe('parseRgbChannel', () => {
         expect(parseRgbChannel('-1')).toBeNull()
         expect(parseRgbChannel('101%')).toBeNull()
         expect(parseRgbChannel('abc')).toBeNull()
+        expect(parseRgbChannel('')).toBeNull()
+        expect(parseRgbChannel('  ')).toBeNull()
+        expect(parseRgbChannel('-1%')).toBeNull()
+        expect(parseRgbChannel('Infinity')).toBeNull()
     })
 })
 
@@ -216,8 +265,29 @@ describe('parseHslColor', () => {
 })
 
 describe('parseAlphaChannel', () => {
+    it.each([
+        ['+.5', 0.5],
+        ['000.5', 0.5],
+        [' +0.25 ', 0.25],
+        [' +.5% ', 0.005],
+        ['12.5%', 0.125],
+        ['-0', 0],
+        ['0%', 0],
+        ['100%', 1],
+    ])('preserves valid decimal and percentage token %s', (token, expected) => {
+        expect(parseAlphaChannel(token)).toBe(expected)
+    })
+
+    it.each(['0.5junk', '0px', '50junk%', '50%%', '50%junk', '50 %', '0.5.2', '1.', '1e-1', '0x10', '+ 1'])(
+        'rejects partial numeric token %s',
+        (token) => {
+            expect(parseAlphaChannel(token)).toBeNull()
+        },
+    )
+
     it('treats missing/empty as fully opaque', () => {
         expect(parseAlphaChannel(undefined)).toBe(1)
+        expect(parseAlphaChannel('')).toBe(1)
         expect(parseAlphaChannel('  ')).toBe(1)
     })
 
@@ -233,6 +303,8 @@ describe('parseAlphaChannel', () => {
         expect(parseAlphaChannel('-0.1')).toBeNull()
         expect(parseAlphaChannel('101%')).toBeNull()
         expect(parseAlphaChannel('abc')).toBeNull()
+        expect(parseAlphaChannel('-1%')).toBeNull()
+        expect(parseAlphaChannel('Infinity')).toBeNull()
     })
 })
 
