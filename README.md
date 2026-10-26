@@ -1,11 +1,14 @@
 # Inertia UI Vanilla
 
+[![npm version](https://img.shields.io/npm/v/@inertiaui/vanilla)](https://www.npmjs.com/package/@inertiaui/vanilla)
+
 A lightweight vanilla TypeScript library providing UI utilities for dialogs, animations, focus management, menu/listbox navigation, click outside detection, floating and native popover positioning, reorder interactions, color parsing, debounce helpers, and common helper functions. Framework-agnostic and designed to integrate seamlessly with Vue, React, or any JavaScript application.
 
 This package is part of the [Inertia UI](https://inertiaui.com) suite. Check out our other packages:
 
 - **[Inertia Modal](https://inertiaui.com/inertia-modal/docs/)**: Turn any Laravel route into a modal or slideover with a single component. No backend changes needed, with support for nested/stacked modals and inter-modal communication. Works with Vue and React.
 - **[Inertia Table](https://inertiaui.com/inertia-table)**: The most complete data table package for Laravel and Inertia.js. Sorting, searching, and filtering across relationships, bulk actions, CSV/Excel/PDF exports, sticky headers, and much more. Works with Vue and React.
+- **[Inertia Forms](https://inertiaui.com/inertia-forms)**: Define forms in Laravel and render them with a single Vue or React component. Includes validation, file uploads, conditional fields, and multi-step flows.
 
 [![Inertia UI](https://inertiaui.com/visit-card.jpg)](https://inertiaui.com)
 
