@@ -1038,7 +1038,7 @@ The helper is intentionally scoped to caller-selected variables. It does not obs
 
 ## Accessibility
 
-Accessibility utilities for managing `aria-hidden` attributes with reference counting support.
+Accessibility utilities for managing `aria-hidden` attributes with reference counting support, and for announcing messages to screen readers.
 
 ### markAriaHidden
 
@@ -1146,6 +1146,39 @@ function openDialog(dialogElement: HTMLElement) {
     return closeDialog
 }
 ```
+
+### createAnnouncer
+
+Announces messages to screen readers through two live regions that you render: one polite and one assertive. Render both regions when the page loads and keep them in the DOM. A screen reader ignores text that a new live region contains when it appears.
+
+```html
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+```
+
+```typescript
+import { createAnnouncer } from '@inertiaui/vanilla'
+
+const announcer = createAnnouncer({
+    polite: document.querySelector('[aria-live="polite"]')!,
+    assertive: document.querySelector('[aria-live="assertive"]')!,
+})
+
+announcer.announce('Invoice saved.', 'polite')
+announcer.announce('Payment failed.', 'assertive')
+
+// When the regions unmount
+announcer.destroy()
+```
+
+The announcer writes only plain text to the regions, so a screen reader does not read buttons or other markup with the message. It also handles the timing that screen readers need:
+
+- It writes nothing until 150ms after you create it, so the regions exist before their first text arrives.
+- It joins messages that arrive within 50ms into one announcement for each region.
+- It empties a region 1 second after its last write, so the virtual cursor does not find old messages.
+- It empties a region before it writes the same text again, so a repeated message is announced again.
+
+`destroy()` cancels pending writes and clearing timers, and ignores future announcements. It does not empty the regions.
 
 ## Animation
 
@@ -1360,7 +1393,7 @@ prefersDarkMode(() => document.body.dataset.theme === 'dark')
 
 ## RTL Support
 
-Utilities for detecting and observing right-to-left document direction.
+Utilities for detecting and observing right-to-left direction, for the document and for single elements.
 
 ### isRtl
 
@@ -1386,6 +1419,30 @@ const cleanup = onRtlChange((rtl) => {
 })
 
 // Later, stop observing
+cleanup()
+```
+
+### isRightToLeft
+
+Check whether an element is written right to left, from its computed `direction`. Unlike `isRtl()`, it follows a `dir` attribute on any ancestor, such as a right-to-left section in a left-to-right page.
+
+```typescript
+import { isRightToLeft } from '@inertiaui/vanilla'
+
+const forward = isRightToLeft(list) ? 'ArrowLeft' : 'ArrowRight'
+```
+
+### followReferenceDirection
+
+Give a panel that renders away from its reference, such as in `document.body`, the direction of the reference. A panel that has its own `dir` attribute keeps it. Returns a cleanup function that removes the direction again.
+
+```typescript
+import { followReferenceDirection } from '@inertiaui/vanilla'
+
+document.body.append(panel)
+const cleanup = followReferenceDirection(trigger, panel)
+
+// When the panel closes
 cleanup()
 ```
 
@@ -1808,6 +1865,26 @@ for (const [key, value] of Object.entries(props)) {
 // customEvents: { onModalReady, onUserUpdated }
 ```
 
+#### replacePlaceholders
+
+Replaces placeholders in the format of Laravel translation strings, such as `:name`, with values.
+
+```typescript
+import { replacePlaceholders } from '@inertiaui/vanilla'
+
+replacePlaceholders('Hello, :name!', { name: 'Taylor' })               // 'Hello, Taylor!'
+replacePlaceholders(':count unread', { count: 3 })                     // '3 unread'
+replacePlaceholders('Show :names to :name', { name: 'Taylor', names: 'Jess, Nuno' })
+// 'Show Jess, Nuno to Taylor'
+```
+
+The replacement follows these rules:
+
+- A longer key wins over a shorter key that starts it, whatever order the keys have.
+- A placeholder ends at a character that is not a letter, digit, combining mark, or underscore. `:named` is not `:name` followed by `d`.
+- A placeholder without a value stays in the string.
+- The values are written as they are. A value that contains `:count` does not get a count.
+
 ### URL Utilities
 
 #### sameUrlPath
@@ -1900,6 +1977,8 @@ This library is written in TypeScript and exports the following types:
 ```typescript
 import type {
     AnimateOptions,
+    Announcer,
+    AnnouncerPoliteness,
     AutoScrollAxis,
     AutoScrollContainer,
     AutoScrollerOptions,
