@@ -29,7 +29,8 @@ describe('positionTopLayerPopover', () => {
         popover.getBoundingClientRect = () => rect(0, 0, 220, contentHeight)
         document.body.append(reference, popover)
         const position = () =>
-            positionTopLayerPopover(reference, popover, { placement: 'bottom-start', anchorPositioning: false }).placement
+            positionTopLayerPopover(reference, popover, { placement: 'bottom-start', anchorPositioning: false })
+                .placement
 
         expect(position()).toBe('top-start')
         contentHeight = 100
