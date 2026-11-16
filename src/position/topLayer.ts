@@ -20,11 +20,16 @@ import {
 } from './geometry'
 import { captureStyleProperty, removeStyleProperty, restoreStyleProperty, setStyleProperty } from './style'
 import type {
+    Placement,
     PositionResult,
     StoredParkedStyles,
     TopLayerElementResizeObserver,
     TopLayerPopoverPositionOptions,
 } from './types'
+
+// Placement each auto-updated popover settled on, so later updates keep a flipped side.
+const autoUpdatedPopovers = new WeakSet<HTMLElement>()
+const settledPlacements = new WeakMap<HTMLElement, Placement>()
 
 function observeTopLayerElementResize(
     reference: HTMLElement,
@@ -143,7 +148,23 @@ export function positionTopLayerPopover(
             height: Math.max(measuredRect.height, floating.scrollHeight),
         }
 
-        return resolveTopLayerPlacement(placement, referenceRect, naturalSize, viewport, offset, viewportMargin, flip)
+        const current = autoUpdatedPopovers.has(floating) ? settledPlacements.get(floating) : undefined
+        const resolved = resolveTopLayerPlacement(
+            placement,
+            referenceRect,
+            naturalSize,
+            viewport,
+            offset,
+            viewportMargin,
+            flip,
+            current,
+        )
+
+        if (autoUpdatedPopovers.has(floating)) {
+            settledPlacements.set(floating, resolved)
+        }
+
+        return resolved
     }
 
     if (anchorPositioning && supportsTopLayerAnchorPositioning() && (!flip || supportsAnchorFlip())) {
@@ -253,6 +274,7 @@ export function autoUpdateTopLayerPopover(
     floating: HTMLElement,
     update: () => void,
 ): CleanupFunction {
+    autoUpdatedPopovers.add(floating)
     const visualViewport = window.visualViewport
     const browserAnchorsPopover = () => supportsTopLayerAnchorPositioning() && findAnchorClass(floating) !== undefined
     let rafId: number | undefined
@@ -465,6 +487,8 @@ export function autoUpdateTopLayerPopover(
             return
         }
         cleaned = true
+        autoUpdatedPopovers.delete(floating)
+        settledPlacements.delete(floating)
 
         if (rafId !== undefined) {
             cancelAnimationFrame(rafId)
