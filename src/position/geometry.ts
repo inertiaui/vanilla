@@ -148,6 +148,7 @@ export function resolveTopLayerPlacement(
     offset: number,
     margin: number,
     flip: boolean,
+    currentPlacement?: Placement,
 ): Placement {
     if (!flip) {
         return preferredPlacement
@@ -159,6 +160,12 @@ export function resolveTopLayerPlacement(
     const floatingLength = side === 'left' || side === 'right' ? floatingSize.width : floatingSize.height
     const preferredSpace = getAvailableSpace(referenceRect, viewport, side, offset, margin)
     const oppositeSpace = getAvailableSpace(referenceRect, viewport, oppositeSide, offset, margin)
+
+    // Once flipped, stay on that side while the content still fits there, so shrinking content
+    // (such as a filtered list) doesn't make an open popover jump back and forth.
+    if (currentPlacement === oppositePlacement && floatingLength <= oppositeSpace) {
+        return oppositePlacement
+    }
 
     if (floatingLength > preferredSpace && oppositeSpace > preferredSpace) {
         return oppositePlacement
