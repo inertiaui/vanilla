@@ -1,4 +1,5 @@
 import type { CleanupFunction } from '../dialog'
+import { isRightToLeft } from '../rtl'
 import {
     cleanupAnchorPositioning,
     detachAnchorPositioning,
@@ -11,7 +12,6 @@ import {
 import {
     clampTopLayerCoordinates,
     computePositionFromRect,
-    isRightToLeft,
     getAvailableSpace,
     getViewportRect,
     referenceIntersectsViewport,

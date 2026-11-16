@@ -82,6 +82,28 @@ export function kebabCase(string: string): string {
         .toLowerCase()
 }
 
+/**
+ * Replaces Laravel-style placeholders, such as `:name`, with the given values in one pass. A longer key wins over a
+ * shorter one that starts it, so `:names` is not read as `:name` followed by `s`. A placeholder followed by a letter,
+ * digit, or underscore is left alone, as are placeholders without a value. Values are not searched for placeholders.
+ */
+export function replacePlaceholders(template: string, params: Record<string, string | number>): string {
+    const keys = Object.keys(params).filter((key) => key !== '')
+
+    if (keys.length === 0) {
+        return template
+    }
+
+    const pattern = keys
+        .sort((left, right) => right.length - left.length)
+        .map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('|')
+
+    return template.replace(new RegExp(`:(${pattern})(?![\\p{L}\\p{N}\\p{M}_])`, 'gu'), (_, key: string) =>
+        String(params[key]),
+    )
+}
+
 const standardDomEventPattern = /* @__PURE__ */ new RegExp(
     '^on(' +
         'click|dblclick|mousedown|mouseup|mouseover|mouseout|mousemove|mouseenter|mouseleave|' +

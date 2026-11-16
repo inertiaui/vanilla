@@ -4,6 +4,7 @@ export {
     only,
     rejectNullValues,
     kebabCase,
+    replacePlaceholders,
     isStandardDomEvent,
     sameUrlPath,
     onceChildrenRendered,
@@ -27,6 +28,9 @@ export type {
     LayoutAnimationController,
     LayoutAnimationOptions,
 } from './animate'
+
+export { createAnnouncer } from './announcer'
+export type { Announcer, AnnouncerPoliteness } from './announcer'
 
 export { lockScroll, createFocusTrap, onEscapeKey, markAriaHidden, markInert } from './dialog'
 export type { CleanupFunction, FocusTrapOptions, EscapeKeyOptions } from './dialog'
@@ -97,7 +101,7 @@ export { debounce, createDebouncer, detectFramerate } from './debounce'
 export type { Debouncer } from './debounce'
 export { prefersDarkMode } from './darkMode'
 export type { DarkModeStrategy } from './darkMode'
-export { isRtl, onRtlChange } from './rtl'
+export { isRtl, isRightToLeft, onRtlChange, followReferenceDirection } from './rtl'
 
 export {
     hexToHsl,

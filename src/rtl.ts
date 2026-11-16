@@ -8,6 +8,14 @@ export function isRtl(): boolean {
 }
 
 /**
+ * Check whether an element is written right to left, from its computed `direction`. Unlike `isRtl()`, this follows a
+ * `dir` attribute on any ancestor, such as a right-to-left section in a left-to-right page.
+ */
+export function isRightToLeft(element: Element): boolean {
+    return getComputedStyle(element).direction === 'rtl'
+}
+
+/**
  * Observe changes to the document's `dir` attribute and invoke the callback
  * whenever it changes. Returns a cleanup function to stop observing.
  */

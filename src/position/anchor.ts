@@ -1,5 +1,5 @@
 import { generateId } from '../helpers'
-import { isRightToLeft } from './geometry'
+import { isRightToLeft } from '../rtl'
 import { captureStyleProperty, removeStyleProperty, restoreStyleProperty, setStyleProperty } from './style'
 import type { Placement, StoredStyleProperty } from './types'
 

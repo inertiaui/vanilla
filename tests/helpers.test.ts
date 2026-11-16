@@ -1,4 +1,36 @@
-import { except, isStandardDomEvent, kebabCase, only } from '../src/helpers'
+import { except, isStandardDomEvent, kebabCase, only, replacePlaceholders } from '../src/helpers'
+
+describe('replacePlaceholders', () => {
+    it('prefers the longest key, so a key that starts another does not split it', () => {
+        expect(replacePlaceholders('Show :names to :name', { name: 'Taylor', names: 'Jess, Nuno' })).toBe(
+            'Show Jess, Nuno to Taylor',
+        )
+        expect(replacePlaceholders('Show :names to :name', { names: 'Jess, Nuno', name: 'Taylor' })).toBe(
+            'Show Jess, Nuno to Taylor',
+        )
+    })
+
+    it('does not replace placeholders that appear in a value', () => {
+        expect(replacePlaceholders(':title (:count)', { title: 'Invoice :count', count: 3 })).toBe('Invoice :count (3)')
+    })
+
+    it('ends a placeholder at punctuation but not at a letter, digit, underscore, or combining mark', () => {
+        expect(replacePlaceholders(':name, :name. (:name)', { name: 'Taylor' })).toBe('Taylor, Taylor. (Taylor)')
+        expect(replacePlaceholders(':named :name2 :name_x', { name: 'Taylor' })).toBe(':named :name2 :name_x')
+        expect(replacePlaceholders(':nameé :name\u0301', { name: 'Taylor' })).toBe(':nameé :name\u0301')
+    })
+
+    it('keeps placeholders without a value and treats regex characters in keys literally', () => {
+        expect(replacePlaceholders('Hi :name, :missing', { name: 'Taylor' })).toBe('Hi Taylor, :missing')
+        expect(replacePlaceholders(':a.b :axb', { 'a.b': 'dot' })).toBe('dot :axb')
+        expect(replacePlaceholders('Hi :name', {})).toBe('Hi :name')
+    })
+
+    it('writes values literally, including replacement patterns and zero', () => {
+        expect(replacePlaceholders(':price', { price: '$& $1' })).toBe('$& $1')
+        expect(replacePlaceholders(':count left', { count: 0 })).toBe('0 left')
+    })
+})
 
 describe('kebabCase', () => {
     it.each([

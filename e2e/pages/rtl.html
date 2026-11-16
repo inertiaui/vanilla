@@ -37,18 +37,73 @@
             </table>
         </section>
 
+        <section>
+            <h2>isRightToLeft / followReferenceDirection</h2>
+            <div dir="rtl"><span id="rtl-section-reference">Right-to-left section</span></div>
+            <span id="ltr-reference">Left-to-right text</span>
+            <table class="results-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Result</th>
+                </tr>
+                <tr>
+                    <td>isRightToLeft() inside a dir="rtl" ancestor, isRtl() of the page</td>
+                    <td id="element-rtl"></td>
+                </tr>
+                <tr>
+                    <td>isRightToLeft() in the left-to-right page</td>
+                    <td id="element-ltr"></td>
+                </tr>
+                <tr>
+                    <td>Panel dir after following, after cleanup</td>
+                    <td id="follow-direction"></td>
+                </tr>
+                <tr>
+                    <td>Panel with its own dir after following, after cleanup</td>
+                    <td id="follow-own-direction"></td>
+                </tr>
+                <tr>
+                    <td>Panel dir after following a left-to-right reference</td>
+                    <td id="follow-same-direction"></td>
+                </tr>
+            </table>
+        </section>
+
         <button id="switch-to-rtl">Switch to RTL</button>
         <button id="switch-to-ltr">Switch to LTR</button>
         <button id="cleanup-and-switch">Cleanup then switch</button>
 
         <script type="module">
-            import { isRtl, onRtlChange } from '../../src/index.ts'
+            import { isRtl, isRightToLeft, onRtlChange, followReferenceDirection } from '../../src/index.ts'
 
             const set = (id, value) => (document.getElementById(id).textContent = String(value))
 
             // Initial state (LTR)
             document.documentElement.dir = 'ltr'
             set('rtl-initial', isRtl())
+
+            const rtlReference = document.getElementById('rtl-section-reference')
+            const ltrReference = document.getElementById('ltr-reference')
+            set('element-rtl', `${isRightToLeft(rtlReference)} ${isRtl()}`)
+            set('element-ltr', isRightToLeft(ltrReference))
+
+            const follow = (reference, panel) => {
+                document.body.append(panel)
+                const cleanup = followReferenceDirection(reference, panel)
+                const during = panel.getAttribute('dir')
+                cleanup()
+                const after = panel.getAttribute('dir')
+                panel.remove()
+
+                return `${during} ${after}`
+            }
+
+            set('follow-direction', follow(rtlReference, document.createElement('div')))
+
+            const ownPanel = document.createElement('div')
+            ownPanel.dir = 'ltr'
+            set('follow-own-direction', follow(rtlReference, ownPanel))
+            set('follow-same-direction', follow(ltrReference, document.createElement('div')))
 
             // Set up observer
             let callbackValue = null

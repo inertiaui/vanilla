@@ -1,12 +1,8 @@
+import { isRightToLeft } from '../rtl'
 import type { FloatingSize, Placement, PositionOptions, PositionResult, ViewportRect } from './types'
 
 function isRtl(): boolean {
     return typeof document !== 'undefined' && document.documentElement.dir === 'rtl'
-}
-
-/** Whether `start` and `end` placements around the reference run from the right, following its writing direction. */
-export function isRightToLeft(reference: Element): boolean {
-    return getComputedStyle(reference).direction === 'rtl'
 }
 
 function getOppositePlacement(placement: Placement): Placement {
