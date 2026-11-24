@@ -14,6 +14,39 @@ describe('positionTopLayerPopover', () => {
         vi.unstubAllGlobals()
     })
 
+    it('keeps a flipped placement while auto-updating, even after the content shrinks', async () => {
+        vi.stubGlobal('CSS', { supports: vi.fn(supportsNonWebKitCss) })
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 })
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 })
+        Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined })
+        const { autoUpdateTopLayerPopover, positionTopLayerPopover } = await import('../src/position')
+        const reference = document.createElement('button')
+        const popover = document.createElement('div')
+        let contentHeight = 300
+        // 148px fits below the reference and 388px above it.
+        reference.getBoundingClientRect = () => rect(80, 400, 300, 440)
+        Object.defineProperty(popover, 'scrollHeight', { configurable: true, get: () => contentHeight })
+        popover.getBoundingClientRect = () => rect(0, 0, 220, contentHeight)
+        document.body.append(reference, popover)
+        const position = () =>
+            positionTopLayerPopover(reference, popover, { placement: 'bottom-start', anchorPositioning: false })
+                .placement
+
+        expect(position()).toBe('top-start')
+        contentHeight = 100
+        expect(position()).toBe('bottom-start')
+
+        contentHeight = 300
+        const cleanup = autoUpdateTopLayerPopover(reference, popover, () => {})
+        expect(position()).toBe('top-start')
+        contentHeight = 100
+        expect(position()).toBe('top-start')
+        cleanup()
+
+        contentHeight = 100
+        expect(position()).toBe('bottom-start')
+    })
+
     it.each([false, true])(
         'does not measure natural content size when flipping is disabled (anchors=%s)',
         async (anchorPositioning) => {
